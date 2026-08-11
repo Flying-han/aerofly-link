@@ -10,6 +10,15 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
+from ui.styles import (
+    INPUT_CSS_LARGE as _INPUT_CSS,
+    COMBO_CSS_LARGE as _COMBO_CSS,
+    LABEL_CSS as _LABEL_CSS,
+    BTN_SMALL_CSS as _BTN_SMALL_CSS,
+    BTN_PRIMARY_CSS,
+    BTN_DANGER_CSS,
+)
+
 # 按 Eco. 区分的服务器预设（对应 Swift 中的服务器环境）
 SERVERS_BY_ECO = {
     "vatsim": [
@@ -59,89 +68,6 @@ class ConnectPage(QFrame):
         }
         self._init_ui()
 
-    # ── 样式常量 ──────────────────────────────────────────
-    _INPUT_CSS = """
-        QLineEdit {
-            background-color: #2d2d2d;
-            color: #f0f0f0;
-            border: 1px solid #555;
-            border-radius: 6px;
-            padding: 10px 14px;
-            font-size: 15px;
-            selection-background-color: #4CAF50;
-        }
-        QLineEdit:focus {
-            border: 1px solid #4CAF50;
-            background-color: #333;
-        }
-        QLineEdit:disabled {
-            background-color: #222;
-            color: #555;
-            border: 1px solid #333;
-        }
-    """
-    _COMBO_CSS = """
-        QComboBox {
-            background-color: #2d2d2d;
-            color: #f0f0f0;
-            border: 1px solid #555;
-            border-radius: 6px;
-            padding: 10px 36px 10px 14px;
-            font-size: 15px;
-            selection-background-color: #4CAF50;
-        }
-        QComboBox::drop-down {
-            subcontrol-origin: padding;
-            subcontrol-position: center right;
-            width: 28px;
-            border: none;
-        }
-        QComboBox::down-arrow {
-            image: none;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 6px solid #aaa;
-            width: 0px;
-            height: 0px;
-        }
-        QComboBox QAbstractItemView {
-            background-color: #2d2d2d;
-            color: #f0f0f0;
-            selection-background-color: #4CAF50;
-            font-size: 14px;
-            padding: 6px;
-            border: 1px solid #555;
-        }
-        QComboBox:disabled {
-            background-color: #222;
-            color: #555;
-            border: 1px solid #333;
-        }
-    """
-    _LABEL_CSS = "color: #aaa; font-size: 13px; font-weight: bold; padding-bottom: 4px;"
-    _BTN_SMALL_CSS = """
-        QPushButton {
-            background-color: #3a3a3a;
-            color: #e0e0e0;
-            border: 1px solid #555;
-            border-radius: 6px;
-            padding: 8px 10px;
-            font-size: 18px;
-            font-weight: bold;
-            min-width: 38px;
-            max-width: 42px;
-        }
-        QPushButton:hover {
-            background-color: #4a4a4a;
-            border: 1px solid #4CAF50;
-        }
-        QPushButton:disabled {
-            background-color: #222;
-            color: #444;
-            border: 1px solid #333;
-        }
-    """
-
     def _init_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -149,19 +75,19 @@ class ConnectPage(QFrame):
 
         # 顶部标题
         header = QVBoxLayout()
-        header.setContentsMargins(0, 36, 0, 20)
-        header.setSpacing(4)
+        header.setContentsMargins(0, 12, 0, 8)
+        header.setSpacing(2)
 
         title = QLabel("Aerofly Link")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
-            "color: #4CAF50; font-size: 28px; font-weight: bold; letter-spacing: 3px;"
+            "color: #4CAF50; font-size: 18px; font-weight: bold; letter-spacing: 1px;"
         )
         header.addWidget(title)
 
         subtitle = QLabel("Aerofly FS 4 联机客户端")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet("color: #888; font-size: 13px;")
+        subtitle.setStyleSheet("color: #888; font-size: 10px;")
         header.addWidget(subtitle)
 
         outer.addLayout(header)
@@ -187,12 +113,12 @@ class ConnectPage(QFrame):
 
         def add_field(label_text, widget):
             lbl = QLabel(label_text)
-            lbl.setStyleSheet(self._LABEL_CSS)
+            lbl.setStyleSheet(_LABEL_CSS)
             form_layout.addWidget(lbl)
             if isinstance(widget, QLineEdit):
-                widget.setStyleSheet(self._INPUT_CSS)
+                widget.setStyleSheet(_INPUT_CSS)
             else:
-                widget.setStyleSheet(self._COMBO_CSS)
+                widget.setStyleSheet(_COMBO_CSS)
             form_layout.addWidget(widget)
 
         # 呼号
@@ -231,10 +157,10 @@ class ConnectPage(QFrame):
         eco_col = QVBoxLayout()
         eco_col.setSpacing(4)
         lbl_eco = QLabel("Eco.")
-        lbl_eco.setStyleSheet(self._LABEL_CSS)
+        lbl_eco.setStyleSheet(_LABEL_CSS)
         eco_col.addWidget(lbl_eco)
         self.combo_eco = QComboBox()
-        self.combo_eco.setStyleSheet(self._COMBO_CSS)
+        self.combo_eco.setStyleSheet(_COMBO_CSS)
         self.combo_eco.addItem(ECO_LABELS["vatsim"], "vatsim")
         self.combo_eco.addItem(ECO_LABELS["private"], "private")
         self.combo_eco.addItem(ECO_LABELS["legacy"], "legacy")
@@ -245,10 +171,10 @@ class ConnectPage(QFrame):
         type_col = QVBoxLayout()
         type_col.setSpacing(4)
         lbl_type = QLabel("Type")
-        lbl_type.setStyleSheet(self._LABEL_CSS)
+        lbl_type.setStyleSheet(_LABEL_CSS)
         type_col.addWidget(lbl_type)
         self.combo_type = QComboBox()
-        self.combo_type.setStyleSheet(self._COMBO_CSS)
+        self.combo_type.setStyleSheet(_COMBO_CSS)
         self.combo_type.addItem(TYPE_LABELS["vatsim"], "vatsim")
         self.combo_type.addItem(TYPE_LABELS["legacy"], "legacy")
         type_col.addWidget(self.combo_type)
@@ -258,7 +184,7 @@ class ConnectPage(QFrame):
 
         # 服务器
         lbl_srv = QLabel("服务器")
-        lbl_srv.setStyleSheet(self._LABEL_CSS)
+        lbl_srv.setStyleSheet(_LABEL_CSS)
         form_layout.addWidget(lbl_srv)
 
         server_row = QHBoxLayout()
@@ -266,18 +192,18 @@ class ConnectPage(QFrame):
 
         self.combo_server = QComboBox()
         self.combo_server.setEditable(True)
-        self.combo_server.setStyleSheet(self._COMBO_CSS)
+        self.combo_server.setStyleSheet(_COMBO_CSS)
         server_row.addWidget(self.combo_server, 1)
 
         self.btn_add = QPushButton("+")
         self.btn_add.setToolTip("添加服务器")
-        self.btn_add.setStyleSheet(self._BTN_SMALL_CSS)
+        self.btn_add.setStyleSheet(_BTN_SMALL_CSS)
         self.btn_add.clicked.connect(self._on_add_server)
         server_row.addWidget(self.btn_add)
 
         self.btn_del = QPushButton("\u2212")
         self.btn_del.setToolTip("删除当前选中的服务器")
-        self.btn_del.setStyleSheet(self._BTN_SMALL_CSS)
+        self.btn_del.setStyleSheet(_BTN_SMALL_CSS)
         self.btn_del.clicked.connect(self._on_del_server)
         server_row.addWidget(self.btn_del)
 
@@ -285,40 +211,12 @@ class ConnectPage(QFrame):
 
         # 连接 / 断开 按钮
         self.btn_connect = QPushButton("连 接 服 务 器")
-        self.btn_connect.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px;
-                font-size: 15px;
-                font-weight: bold;
-                border: none;
-                border-radius: 6px;
-                letter-spacing: 3px;
-            }
-            QPushButton:hover { background-color: #45a049; }
-            QPushButton:pressed { background-color: #388E3C; }
-            QPushButton:disabled { background-color: #333; color: #555; }
-        """)
+        self.btn_connect.setStyleSheet(BTN_PRIMARY_CSS)
         self.btn_connect.clicked.connect(self._on_connect)
         form_layout.addWidget(self.btn_connect)
 
         self.btn_disconnect = QPushButton("断 开 连 接")
-        self.btn_disconnect.setStyleSheet("""
-            QPushButton {
-                background-color: #c0392b;
-                color: white;
-                padding: 10px;
-                font-size: 15px;
-                font-weight: bold;
-                border: none;
-                border-radius: 6px;
-                letter-spacing: 3px;
-            }
-            QPushButton:hover { background-color: #e74c3c; }
-            QPushButton:pressed { background-color: #a93226; }
-            QPushButton:disabled { background-color: #333; color: #555; }
-        """)
+        self.btn_disconnect.setStyleSheet(BTN_DANGER_CSS)
         self.btn_disconnect.clicked.connect(self._on_disconnect)
         self.btn_disconnect.hide()
         form_layout.addWidget(self.btn_disconnect)
@@ -336,7 +234,7 @@ class ConnectPage(QFrame):
         outer.addWidget(scroll, 1)
 
         # 底部提示
-        hint = QLabel("请确保已在 Documents\\Aerofly FS 4\\external_dll\\ 放置 AeroBridgeDLL.dll")
+        hint = QLabel("请确保已在 Documents\\Aerofly FS 4\\external_dll\\ 放置 AeroflyBridge.dll")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setStyleSheet("color: #555; font-size: 12px; padding: 16px;")
         outer.addWidget(hint)

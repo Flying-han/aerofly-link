@@ -21,7 +21,7 @@ from typing import Any, Callable, Optional, Protocol
 
 from .dll_bridge import DLLBridge, Telemetry
 
-logger = logging.getLogger("aerobridge.transponder")
+logger = logging.getLogger("aerofly_link.transponder")
 
 
 # ════════════════════════════════════════════════════════════════════

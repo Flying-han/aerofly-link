@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-AeroBridge PyInstaller 打包配置 — 文件夹版（更快启动，用于制作安装包）
+Aerofly Link PyInstaller 打包配置 — 文件夹版（更快启动，用于制作安装包）
 """
 
 import sys
@@ -13,11 +13,8 @@ a = Analysis(
     pathex=[str(project_root)],
     binaries=[],
     datas=[
-        (str(project_root / 'assets' / 'map.html'), 'assets'),
-        (str(project_root / 'assets' / 'leaflet.js'), 'assets'),
-        (str(project_root / 'assets' / 'leaflet.css'), 'assets'),
         (str(project_root / 'assets' / 'images'), 'assets/images'),
-        (str(project_root / 'config' / 'settings.json'), 'config'),
+        (str(project_root / 'config' / 'settings.example.json'), 'config'),
     ],
     hiddenimports=[
         'asyncio',
@@ -26,9 +23,6 @@ a = Analysis(
         'PyQt6.QtCore',
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
-        'PyQt6.QtWebEngineWidgets',
-        'PyQt6.QtWebEngineCore',
-        'PyQt6.QtWebChannel',
         'PyQt6.QtNetwork',
         'PyQt6.sip',
         'main_window',
@@ -39,11 +33,17 @@ a = Analysis(
         'core.resource_utils',
         'core.mock_server',
         'core.mock_dll_server',
+        'core.diag_logger',
+        'core.async_worker',
+        'core.fsd_protocol',
         'ui.connection_panel',
         'ui.connect_page',
         'ui.transponder_panel',
         'ui.flightplan_panel',
         'ui.log_panel',
+        'ui.styles',
+        'ui.workspace',
+        'ui.status_bar',
     ],
     hookspath=[],
     hooksconfig={},

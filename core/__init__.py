@@ -1,6 +1,6 @@
 """
-AeroBridge FSD Client Core
-==========================
+Aerofly Link FSD Client Core
+=============================
 FSD 协议客户端核心包，包含应答机控制器与 DLL 桥接。
 """
 

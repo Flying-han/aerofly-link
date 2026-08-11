@@ -1,5 +1,5 @@
 @echo off
-title AeroBridge Mock DLL Server
+title Aerofly Link Mock DLL Server
 
 set "PYTHON=python"
 cd /d "%~dp0"
@@ -11,7 +11,7 @@ where "%PYTHON%" >nul 2>&1 || (
 )
 
 echo ========================================
-echo   AeroBridge - Mock DLL Server
+echo   Aerofly Link - Mock DLL Server
 echo   Telemetry : localhost:12345
 echo   Command   : localhost:12346
 echo ========================================

@@ -11,6 +11,8 @@ VATSIM FSD 协议 TCP 客户端，负责：
 
 基于 asyncio TCP，所有 I/O 在后台线程运行。
 通过 PyQt6 pyqtSignal 将事件派发到 UI 线程。
+
+协议常量与工具函数已拆分到 core/fsd_protocol.py。
 """
 
 from __future__ import annotations
@@ -22,116 +24,24 @@ from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-logger = logging.getLogger("aerobridge.fsd_client")
+# 从协议模块导入常量和工具函数
+from core.fsd_protocol import (
+    PROTOCOL_VERSION_LEGACY,
+    PROTOCOL_VERSION_VATSIM,
+    CLIENT_NAME,
+    CLIENT_VERSION,
+    SIMULATOR_TYPE,
+    SIM_TYPE_CODE,
+    DEFAULT_RATING,
+    CLIENT_ID_HEX,
+    pack_pbh,
+    unpack_pbh,
+    xpdr_mode_to_fsd_letter,
+    parse_coord,
+    decimal_to_packed_coord,
+)
 
-
-# ── 协议常量 ─────────────────────────────────────────────────────
-# FSD 协议修订号：
-#   - Legacy / Swift private (FSD V3.000 draft 9) 要求 revision 9
-#   - VATSIM 官方网络使用 revision 100
-PROTOCOL_VERSION_LEGACY = 9     # FSD V3.000 draft 9 / Swift private
-PROTOCOL_VERSION_VATSIM = 100   # VATSIM 现代协议
-CLIENT_NAME = "Aerofly Link"    # 客户端名称
-CLIENT_VERSION = "0.1.0"          # 客户端版本
-SIMULATOR_TYPE = "Aerofly FS 4" # 模拟器类型
-SIM_TYPE_CODE = "0"             # FSD simtype 标识（0=未知，兼容所有服务器）
-DEFAULT_RATING = 1              # 默认飞行员等级
-                                # 如果你的账号等级不同，可在连接面板中选择。
-                                # ⚠️ 服务端会验证 Rating 是否匹配 CID，过高会被拒绝。
-
-# ── PBH (Pitch/Bank/Heading) 位打包常量（与 Swift 一致）──
-# Swift C++ bit-field union 布局（先声明字段在 LSB）:
-#   [pitch:22-31] [bank:12-21] [hdg:2-11] [onground:1] [unused:0]
-PBH_PITCH_MULT = 256.0 / 90.0   # Swift: pitchMultiplier
-PBH_BANK_MULT  = 512.0 / 180.0  # Swift: bankMultiplier
-PBH_HDG_MULT   = 1024.0 / 360.0 # Swift: headingMultiplier
-
-
-def pack_pbh(pitch_deg: float, bank_deg: float, heading_deg: float, on_ground: bool) -> int:
-    """
-    将 Pitch/Bank/Heading 打包为 FSD 32 位无符号整数（与 Swift packPBH 一致）。
-
-    Swift PBH union bit-field 布局（C++ bit-field 从 LSB 开始分配）:
-      bit 0:   unused
-      bit 1:   onGround
-      bit 2-11: heading (10-bit unsigned)
-      bit 12-21: bank (10-bit signed, inverted)
-      bit 22-31: pitch (10-bit signed, inverted)
-
-    FSD 协议中 pitch 和 bank 被反转（取负），这是与 vPilot 一致的约定。
-    """
-    import math
-    p = int(math.floor(pitch_deg * -PBH_PITCH_MULT))   # pitch: 10 bits signed, inverted
-    b = int(math.floor(bank_deg * -PBH_BANK_MULT))      # bank:  10 bits signed, inverted
-    h = int(heading_deg * PBH_HDG_MULT)                  # heading: 10 bits unsigned
-
-    # 钳位到 10-bit 范围
-    p = p & 0x3FF
-    b = b & 0x3FF
-    h = h & 0x3FF
-    og = 1 if on_ground else 0
-
-    # Swift bit layout: [pitch:22-31] [bank:12-21] [hdg:2-11] [onground:1] [unused:0]
-    return ((p & 0x3FF) << 22) | ((b & 0x3FF) << 12) | ((h & 0x3FF) << 2) | (og << 1)
-
-
-def unpack_pbh(pbh: int):
-    """
-    从 FSD 32 位 PBH 整数解包为 (pitch_deg, bank_deg, heading_deg, on_ground)。
-    与 Swift unpackPBH 一致。
-    """
-    import math
-
-    # 提取各字段（Swift bit-field layout）
-    p_raw = (pbh >> 22) & 0x3FF   # pitch:  bits 22-31 (10-bit signed)
-    b_raw = (pbh >> 12) & 0x3FF   # bank:   bits 12-21 (10-bit signed)
-    h_raw = (pbh >> 2) & 0x3FF    # heading: bits 2-11  (10-bit unsigned)
-    on_ground = ((pbh >> 1) & 1) == 1
-
-    # 10-bit signed → Python int（符号扩展）
-    def _s10(v):
-        if v & 0x200:
-            return v - 0x400
-        return v
-
-    # pitch/bank 被反转（取负），需除以 multiplier 并取反
-    pitch_deg = math.floor(_s10(p_raw) / -PBH_PITCH_MULT)
-    bank_deg = math.floor(_s10(b_raw) / -PBH_BANK_MULT)
-    heading_deg = h_raw / PBH_HDG_MULT
-
-    return pitch_deg, bank_deg, heading_deg, on_ground
-
-
-def xpdr_mode_to_fsd_letter(mode: str) -> str:
-    """
-    将应答机模式映射为 FSD 协议字母。
-
-    ⚠️ 注意：FSD 协议使用的是 serializer.cpp 中的 toQString<TransponderMode>()，
-    而非 CTransponder::modeAsShortString()。两者映射不同！
-
-    FSD serializer (serializer.cpp) 映射:
-      StateStandby → "S"
-      ModeC/ModeA/ModeS/ModeMil* → "N"   ← 所有活跃模式
-      StateIdent → "Y"
-
-    CTransponder::modeAsShortString() 映射（UI 用，非协议）:
-      StateStandby → "S", ModeC → "C", StateIdent → "I"
-
-    如果发 "C"，Swift fromQString<TransponderMode>("C") 不匹配 "S"/"N"/"Y"，
-    fallback 到 StateStandby → 其他客户端将飞机视为 STBY → 不显示！
-    """
-    mode_upper = (mode or "").upper()
-    if mode_upper == "STBY":
-        return "S"
-    if mode_upper == "IDENT":
-        return "Y"
-    return "N"  # ALT / ModeC / 默认正常模式
-
-# VATSIM 客户端标识（16 进制 clientId）。
-# 私人 FSD 服务器通常只检查字段数量，不校验白名单；
-# VATSIM 官方服务器需要受信任的 clientId 才会通过 auth challenge。
-# 这里使用 0x0000 表示未授权客户端，可跳过 challenge 流程。
-CLIENT_ID_HEX = "0000"
+logger = logging.getLogger("aerofly_link.fsd_client")
 
 
 class FSDClient(QObject):
@@ -587,7 +497,7 @@ class FSDClient(QObject):
                 _p, _b, _h, _og = unpack_pbh(pbh)
                 import os as _os
                 from pathlib import Path as _P
-                _log_dir = _P(_os.environ.get("APPDATA", _P.home() / "AppData" / "Roaming")) / "AeroBridge"
+                _log_dir = _P(_os.environ.get("APPDATA", _P.home() / "AppData" / "Roaming")) / "AeroflyLink"
                 _log_dir.mkdir(parents=True, exist_ok=True)
                 with open(str(_log_dir / "fsd_packets.log"), "a", encoding="utf-8") as _f:
                     from datetime import datetime as _dt
@@ -1213,8 +1123,8 @@ class FSDClient(QObject):
             # fields[9] = flags
 
             # 解析坐标为 float（同时处理 FSD packed 和 decimal 格式）
-            lat_f = self._parse_coord(lat, is_lon=False)
-            lon_f = self._parse_coord(lon, is_lon=True)
+            lat_f = parse_coord(lat, is_lon=False)
+            lon_f = parse_coord(lon, is_lon=True)
 
             # 解包 PBH 获取朝向与地面状态
             try:
@@ -1258,53 +1168,7 @@ class FSDClient(QObject):
             del self._traffic[callsign]
             self.traffic_updated.emit(list(self._traffic.values()))
 
-    @staticmethod
-    def _parse_coord(raw: str, is_lon: bool = False) -> float:
-        """
-        解析 FSD 坐标，兼容两种格式：
-        1. FSD packed 格式: DDMM.mmm (lat) 或 DDDMM.mmm (lon)，值 > 180
-        2. 十进制格式: DD.ddd，绝对值在 [-180, 180] 范围内
-
-        启发式：如果绝对值 <= 180，认为是十进制格式（packed 格式的值
-        总是 >= 1000，远超有效经纬度范围）
-        """
-        val = float(raw)
-        if abs(val) <= 180:
-            return val  # 已经是十进制
-        # FSD packed 格式转换: DD(D)MM.mmm → DD(D) + MM.mmm/60
-        deg = int(val / 100)
-        minutes = val - deg * 100
-        return deg + minutes / 60.0
-
-    @staticmethod
-    def _decimal_to_packed_coord(decimal_degrees: float, is_lon: bool = False) -> str:
-        """
-        将十进制坐标转换为 FSD packed 格式：
-        - 纬度: DDMM.mmm（南纬加负号前缀）
-        - 经度: DDDMM.mmm（始终 0-360 范围，无负号）
-          FSD 协议标准：经度始终为正，西经（负值）转为大正数，
-          如 -118.4025°W → 241.5975°E → packed "24135.850"
-
-        例如：39.9042°N → 3954.252，116.4074°E → 11624.444，
-              -118.4025°W → 24135.850
-        """
-        if is_lon:
-            # FSD 经度：始终 0-360（东经），无负号
-            if decimal_degrees < 0:
-                decimal_degrees += 360.0
-        # 纬度：保留符号标记南北
-        sign = -1 if decimal_degrees < 0 else 1
-        abs_val = abs(decimal_degrees)
-        deg = int(abs_val)
-        minutes = (abs_val - deg) * 60.0
-        if is_lon:
-            packed = f"{deg:03d}{minutes:06.3f}"
-        else:
-            packed = f"{deg:02d}{minutes:06.3f}"
-        # 仅纬度需要负号（经度已在上面转为 0-360）
-        if sign < 0:
-            packed = f"-{packed}"
-        return packed
+    # 坐标解析已迁移至 core/fsd_protocol.py 的 parse_coord / decimal_to_packed_coord
 
     def _is_own_callsign(self, callsign: str) -> bool:
         """

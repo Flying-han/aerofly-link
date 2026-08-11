@@ -9,7 +9,7 @@ Mock DLL Server —— 模拟 AeroflyBridge.dll 的两个端口
 
 用法::
 
-    # 终端 1：启动 Mock DLL（先启动这个，再开 AeroBridge）
+    # 终端 1：启动 Mock DLL（先启动这个，再开 Aerofly Link）
     python mock_dll_server.py
 
     # 或者指定起飞机场

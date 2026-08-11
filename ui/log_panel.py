@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import (
     QPushButton, QHBoxLayout, QGroupBox
 )
 
+from ui.styles import INPUT_CSS, BTN_INFO_CSS
+
 
 class LogPanel(QGroupBox):
     """ATC 通讯日志面板"""
@@ -51,36 +53,12 @@ class LogPanel(QGroupBox):
 
         self.input_msg = QLineEdit()
         self.input_msg.setPlaceholderText("输入消息 (如: @ZGGG_TWR 请求放行)")
-        self.input_msg.setStyleSheet("""
-            QLineEdit {
-                background-color: #2a2a2a;
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 13px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #4CAF50;
-            }
-        """)
+        self.input_msg.setStyleSheet(INPUT_CSS)
         self.input_msg.returnPressed.connect(self._on_send)
         send_layout.addWidget(self.input_msg)
 
         self.btn_send = QPushButton("发送")
-        self.btn_send.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 8px 16px;
-                border: none;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        self.btn_send.setStyleSheet(BTN_INFO_CSS)
         self.btn_send.clicked.connect(self._on_send)
         send_layout.addWidget(self.btn_send)
 

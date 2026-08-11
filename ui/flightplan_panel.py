@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, QTimer
 
+from ui.styles import INPUT_CSS, COMBO_CSS, BTN_INFO_CSS
+
 # ── 选项常量 ─────────────────────────────────────────────────
 FLIGHT_TYPES = ["IFR", "VFR", "SVFR", "DVFR"]
 WAKE_CATEGORIES = ["Light", "Medium", "Heavy", "Super"]
@@ -36,45 +38,9 @@ class FlightPlanPanel(QGroupBox):
         self._time_timer.timeout.connect(self._refresh_utc)
         self._time_timer.start(1000)
 
-    # ── 样式常量 ──────────────────────────────────────────
-    INPUT_STYLE = """
-        QLineEdit, QTextEdit {
-            background-color: #2a2a2a;
-            color: #e0e0e0;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 5px 7px;
-            font-size: 12px;
-        }
-        QLineEdit:focus, QTextEdit:focus {
-            border: 1px solid #4CAF50;
-        }
-        QLineEdit:disabled {
-            background-color: #1a1a1a;
-            color: #666;
-            border: 1px solid #333;
-        }
-    """
-    COMBO_STYLE = """
-        QComboBox {
-            background-color: #2a2a2a;
-            color: #e0e0e0;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 5px 7px;
-            font-size: 12px;
-        }
-        QComboBox QAbstractItemView {
-            background-color: #2a2a2a;
-            color: #e0e0e0;
-            selection-background-color: #4CAF50;
-        }
-        QComboBox:disabled {
-            background-color: #1a1a1a;
-            color: #666;
-            border: 1px solid #333;
-        }
-    """
+    # ── 样式常量（使用共享样式）──────────────────────────────
+    INPUT_STYLE = INPUT_CSS
+    COMBO_STYLE = COMBO_CSS
     LABEL_STYLE = "color: #aaa; font-size: 12px;"
 
     def _init_ui(self):
@@ -230,7 +196,7 @@ class FlightPlanPanel(QGroupBox):
         # ── Remarks ──
         self.input_remarks = QTextEdit()
         self.input_remarks.setPlaceholderText("备注（如 OPR/公司名 RMK/TCAS）")
-        self.input_remarks.setMaximumHeight(50)
+        self.input_remarks.setMinimumHeight(36)
         self.input_remarks.setStyleSheet(self.INPUT_STYLE)
         lbl_rmk = QLabel("Remarks:")
         lbl_rmk.setStyleSheet(self.LABEL_STYLE)
@@ -248,25 +214,7 @@ class FlightPlanPanel(QGroupBox):
 
         # ── 提交按钮 ──
         self.btn_submit = QPushButton("提交飞行计划")
-        self.btn_submit.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 10px;
-                font-size: 13px;
-                font-weight: bold;
-                border: none;
-                border-radius: 4px;
-                margin-top: 6px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #333;
-                color: #666;
-            }
-        """)
+        self.btn_submit.setStyleSheet(BTN_INFO_CSS)
         self.btn_submit.clicked.connect(self._on_submit)
         layout.addWidget(self.btn_submit)
 

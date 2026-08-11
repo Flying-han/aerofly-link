@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
+from ui.styles import INPUT_CSS, COMBO_CSS, BTN_SMALL_CSS
+
 # 默认服务器列表
 DEFAULT_SERVERS = [
     "sweatbox.vatsim.net",
@@ -34,92 +36,40 @@ class ConnectionPanel(QGroupBox):
         form = QFormLayout()
         form.setVerticalSpacing(8)
 
-        # 深色输入框样式
-        input_style = """
-            QLineEdit {
-                background-color: #2a2a2a;
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 4px;
-                padding: 6px 8px;
-                font-size: 13px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #4CAF50;
-            }
-        """
-
-        btn_small_style = """
-            QPushButton {
-                background-color: #3a3a3a;
-                color: #e0e0e0;
-                border: 1px solid #555;
-                border-radius: 3px;
-                padding: 4px 8px;
-                font-size: 13px;
-                font-weight: bold;
-                min-width: 24px;
-                max-width: 26px;
-                max-height: 26px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-                border: 1px solid #4CAF50;
-            }
-            QPushButton:pressed {
-                background-color: #555;
-            }
-        """
-
         # 呼号
         self.input_callsign = QLineEdit()
         self.input_callsign.setPlaceholderText("如: CES2101")
         self.input_callsign.setMaxLength(7)
-        self.input_callsign.setStyleSheet(input_style)
+        self.input_callsign.setStyleSheet(INPUT_CSS)
         form.addRow("呼号:", self.input_callsign)
 
         # CID
         self.input_cid = QLineEdit()
         self.input_cid.setPlaceholderText("CID（如: 1234567）")
         self.input_cid.setMaxLength(10)
-        self.input_cid.setStyleSheet(input_style)
+        self.input_cid.setStyleSheet(INPUT_CSS)
         form.addRow("CID:", self.input_cid)
 
         # 密码
         self.input_password = QLineEdit()
         self.input_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_password.setPlaceholderText("密码")
-        self.input_password.setStyleSheet(input_style)
+        self.input_password.setStyleSheet(INPUT_CSS)
         form.addRow("密码:", self.input_password)
 
         # 服务器选择 —— 水平布局 = ComboBox + [+] + [-]
-        combo_style = """
-            QComboBox {
-                background-color: #2a2a2a;
-                color: #e0e0e0;
-                border: 1px solid #444;
-                border-radius: 4px;
-                padding: 6px 8px;
-                font-size: 13px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #2a2a2a;
-                color: #e0e0e0;
-                selection-background-color: #4CAF50;
-            }
-        """
         self.combo_server = QComboBox()
         self.combo_server.setEditable(True)
-        self.combo_server.setStyleSheet(combo_style)
+        self.combo_server.setStyleSheet(COMBO_CSS)
 
         self.btn_add_server = QPushButton("+")
         self.btn_add_server.setToolTip("添加服务器")
-        self.btn_add_server.setStyleSheet(btn_small_style)
+        self.btn_add_server.setStyleSheet(BTN_SMALL_CSS)
         self.btn_add_server.clicked.connect(self._on_add_server)
 
         self.btn_del_server = QPushButton("-")
         self.btn_del_server.setToolTip("删除当前选中的服务器")
-        self.btn_del_server.setStyleSheet(btn_small_style)
+        self.btn_del_server.setStyleSheet(BTN_SMALL_CSS)
         self.btn_del_server.clicked.connect(self._on_del_server)
 
         server_row = QHBoxLayout()
@@ -132,12 +82,12 @@ class ConnectionPanel(QGroupBox):
         # 真实姓名
         self.input_realname = QLineEdit()
         self.input_realname.setPlaceholderText("真实姓名（用于飞行计划）")
-        self.input_realname.setStyleSheet(input_style)
+        self.input_realname.setStyleSheet(INPUT_CSS)
         form.addRow("姓名:", self.input_realname)
 
         # 飞行员等级（服务器验证 CID 对应的等级，过高会被拒绝）
         self.combo_rating = QComboBox()
-        self.combo_rating.setStyleSheet(combo_style)
+        self.combo_rating.setStyleSheet(COMBO_CSS)
         self.combo_rating.addItem("OBS (观察员)", 1)
         self.combo_rating.addItem("S1 (学生)", 2)
         self.combo_rating.addItem("S2 (学生2)", 3)
@@ -149,7 +99,7 @@ class ConnectionPanel(QGroupBox):
         self.input_model = QLineEdit()
         self.input_model.setPlaceholderText("如: B738, A320")
         self.input_model.setMaxLength(4)
-        self.input_model.setStyleSheet(input_style)
+        self.input_model.setStyleSheet(INPUT_CSS)
         form.addRow("机型:", self.input_model)
 
         # Mock DLL 位置配置
@@ -162,17 +112,17 @@ class ConnectionPanel(QGroupBox):
 
         self.input_mock_lat = QLineEdit()
         self.input_mock_lat.setPlaceholderText("如: 51.4775")
-        self.input_mock_lat.setStyleSheet(input_style)
+        self.input_mock_lat.setStyleSheet(INPUT_CSS)
         mock_form.addRow("纬度:", self.input_mock_lat)
 
         self.input_mock_lon = QLineEdit()
         self.input_mock_lon.setPlaceholderText("如: -0.4614（伦敦希思罗）")
-        self.input_mock_lon.setStyleSheet(input_style)
+        self.input_mock_lon.setStyleSheet(INPUT_CSS)
         mock_form.addRow("经度:", self.input_mock_lon)
 
         self.input_mock_alt = QLineEdit()
         self.input_mock_alt.setPlaceholderText("如: 3500 (米)")
-        self.input_mock_alt.setStyleSheet(input_style)
+        self.input_mock_alt.setStyleSheet(INPUT_CSS)
         mock_form.addRow("高度:", self.input_mock_alt)
 
         layout.addLayout(mock_form)

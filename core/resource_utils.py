@@ -26,7 +26,7 @@ def get_base_path() -> Path:
     if getattr(sys, 'frozen', False):
         # 单文件夹打包：以 exe 所在目录为基准，_internal 在同级
         return Path(sys.executable).parent
-    return Path(__file__).parent.parent  # core/ -> aerobridge/
+    return Path(__file__).parent.parent  # core/ -> aerofly_link/
 
 
 def get_asset_path(relative_path: str) -> Path:
@@ -51,10 +51,10 @@ def get_config_dir() -> Path:
     """
     获取可写入的配置目录
     - 开发环境：项目下的 config/
-    - 打包环境：%APPDATA%/AeroBridge/
+    - 打包环境：%APPDATA%/AeroflyLink/
     """
     if getattr(sys, 'frozen', False):
-        config_dir = Path(os.environ.get("APPDATA", Path.home())) / "AeroBridge"
+        config_dir = Path(os.environ.get("APPDATA", Path.home())) / "AeroflyLink"
     else:
         config_dir = Path(__file__).parent.parent / "config"
     config_dir.mkdir(parents=True, exist_ok=True)

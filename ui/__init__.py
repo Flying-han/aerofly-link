@@ -1,5 +1,5 @@
 """
-AeroBridge UI 包
+Aerofly Link UI 包
 """
 from .connection_panel import ConnectionPanel
 from .transponder_panel import TransponderPanel

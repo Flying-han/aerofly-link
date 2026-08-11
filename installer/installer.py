@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-AeroBridge 安装器 — 傻瓜式安装向导 (PyQt6 版)
-打包后生成单个 setup.exe，双击即可安装 AeroBridge 应用和 AF4 DLL
+Aerofly Link 安装器 — 傻瓜式安装向导 (PyQt6 版)
+打包后生成单个 setup.exe，双击即可安装 Aerofly Link 应用和 AF4 DLL
 支持 --uninstall 参数作为卸载器使用
 """
 import os
@@ -22,11 +22,11 @@ from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QFont, QPalette, QColor
 
 # ── 常量 ──────────────────────────────────────────────
-APP_NAME = "AeroBridge"
+APP_NAME = "Aerofly Link"
 APP_VERSION = "1.0.0"
-PUBLISHER = "AeroBridge"
+PUBLISHER = "Aerofly Link"
 
-REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AeroBridge"
+REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AeroflyLink"
 
 DEFAULT_INSTALL_DIR = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), APP_NAME)
 
@@ -282,10 +282,10 @@ class InstallerWizard(QWidget):
         layout.addWidget(desc)
 
         info = QLabel(
-            "本程序将安装 AeroBridge 客户端及 AF4 桥接 DLL\n\n"
+            "本程序将安装 Aerofly Link 客户端及 AF4 桥接 DLL\n\n"
             "安装内容包括：\n"
-            "  • AeroBridge 客户端程序\n"
-            "  • AeroBridgeDLL.dll（自动放置到 AF4 external_dll 目录）\n"
+            "  • Aerofly Link 客户端程序\n"
+            "  • AeroflyBridge.dll（自动放置到 AF4 external_dll 目录）\n"
             "  • 桌面和开始菜单快捷方式"
         )
         info.setWordWrap(True)
@@ -392,7 +392,7 @@ class InstallerWizard(QWidget):
         layout.addWidget(self.complete_title)
 
         complete_info = QLabel(
-            "AeroBridge 已成功安装到您的计算机\n\n"
+            "Aerofly Link 已成功安装到您的计算机\n\n"
             "请确保 Aerofly FS 4 已正确安装\n"
             "DLL 已放置到 external_dll 目录"
         )
@@ -400,7 +400,7 @@ class InstallerWizard(QWidget):
         complete_info.setWordWrap(True)
         layout.addWidget(complete_info)
 
-        self.launch_cb = QCheckBox("立即启动 AeroBridge")
+        self.launch_cb = QCheckBox("立即启动 Aerofly Link")
         self.launch_cb.setChecked(True)
         layout.addWidget(self.launch_cb, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addStretch()
@@ -469,7 +469,7 @@ class InstallerWizard(QWidget):
     def _do_install(self):
         steps = [
             ("创建安装目录...", self._step_create_dir),
-            ("解压 AeroBridge 程序...", self._step_extract_app),
+            ("解压 Aerofly Link 程序...", self._step_extract_app),
             ("安装 AF4 桥接 DLL...", self._step_install_dll),
             ("创建快捷方式...", self._step_create_shortcuts),
             ("写入注册表...", self._step_write_registry),
@@ -495,9 +495,9 @@ class InstallerWizard(QWidget):
 
     def _step_extract_app(self):
         res = get_resource_dir()
-        zip_path = os.path.join(res, "aerobridge.zip")
+        zip_path = os.path.join(res, "aerofly_link.zip")
         if not os.path.exists(zip_path):
-            raise FileNotFoundError("找不到应用程序包 aerobridge.zip")
+            raise FileNotFoundError("找不到应用程序包 aerofly_link.zip")
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(self.install_dir)
 
@@ -524,7 +524,7 @@ class InstallerWizard(QWidget):
             self.progress_signal.emit(f"  ✓ DLL 也已安装到 Documents: {dll_dir2}")
 
     def _step_create_shortcuts(self):
-        exe_path = os.path.join(self.install_dir, "AeroBridge.exe")
+        exe_path = os.path.join(self.install_dir, "Aerofly Link.exe")
         failed = []
 
         if self.create_desktop_shortcut:
@@ -566,7 +566,7 @@ class InstallerWizard(QWidget):
         winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, APP_VERSION)
         winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, PUBLISHER)
         winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ,
-                          os.path.join(self.install_dir, "AeroBridge.exe"))
+                          os.path.join(self.install_dir, "Aerofly Link.exe"))
         winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, self.install_dir)
         winreg.SetValueEx(key, "AF4Dir", 0, winreg.REG_SZ, self.af4_dir)
         winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ,
@@ -582,7 +582,7 @@ class InstallerWizard(QWidget):
 
     def _finish(self):
         if self.launch_cb.isChecked():
-            exe = os.path.join(self.install_dir, "AeroBridge.exe")
+            exe = os.path.join(self.install_dir, "Aerofly Link.exe")
             if os.path.exists(exe):
                 subprocess.Popen([exe])
         self.close()
@@ -611,7 +611,7 @@ class UninstallerWizard(QWidget):
         info = QLabel(
             f"确定要完全卸载 {APP_NAME} 吗？\n\n"
             "将删除：\n"
-            "  • AeroBridge 程序文件\n"
+            "  • Aerofly Link 程序文件\n"
             "  • AF4 external_dll 中的桥接 DLL\n"
             "  • 桌面和开始菜单快捷方式\n"
             "  • 注册表项"
@@ -689,7 +689,7 @@ class UninstallerWizard(QWidget):
 
     def _un_step_dll(self):
         # 清理两个可能的 DLL 安装位置
-        dll_files = ["AeroflyBridge.dll", "AeroBridgeDLL.dll",
+        dll_files = ["AeroflyBridge.dll", "AeroflyLinkDLL.dll",
                      "libgcc_s_seh-1.dll", "libstdc++-6.dll",
                      "libwinpthread-1.dll"]
 

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-AeroBridge 安装器 PyInstaller 打包配置
-输出单个 AeroBridge_Setup.exe，内含应用 zip 和 DLL zip
+Aerofly Link 安装器 PyInstaller 打包配置
+输出单个 AeroflyLink_Setup.exe，内含应用 zip 和 DLL zip
 """
 
 import os
@@ -13,7 +13,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('data/aerobridge.zip', '.'),
+        ('data/aerofly_link.zip', '.'),
         ('data/dll.zip', '.'),
     ],
     hiddenimports=[
@@ -47,7 +47,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='AeroBridge_Setup',
+    name='AeroflyLink_Setup',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

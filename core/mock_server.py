@@ -2,7 +2,7 @@
 内置 Mock 服务器 —— 模拟 AeroflyBridge.dll
 ===========================================
 当 AF4 游戏无法加载 external DLL 时（如非正版游戏），
-AeroBridge 可自动启动此模拟服务器，提供模拟飞行数据。
+Aerofly Link 可自动启动此模拟服务器，提供模拟飞行数据。
 
 输出格式与 AeroflyBridge.dll v0.3.1 完全兼容：
   12345 遥测：扁平 JSON，单位与真实 DLL 一致（弧度/m/s/Hz）
@@ -12,7 +12,7 @@ AeroBridge 可自动启动此模拟服务器，提供模拟飞行数据。
 
     await mock = MockServer(center_lat=31.1434, center_lon=121.8082)
     await mock.start()
-    # ... AeroBridge 自动连接 ...
+    # ... Aerofly Link 自动连接 ...
     await mock.stop()
 """
 
@@ -25,7 +25,7 @@ import time
 import logging
 from typing import Optional
 
-logger = logging.getLogger("aerobridge.mock_server")
+logger = logging.getLogger("aerofly_link.mock_server")
 
 DEFAULT_TELEMETRY_PORT = 12345
 DEFAULT_COMMAND_PORT = 12346

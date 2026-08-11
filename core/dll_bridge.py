@@ -26,26 +26,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-logger = logging.getLogger("aerobridge.dll_bridge")
+logger = logging.getLogger("aerofly_link.dll_bridge")
 
-# ── 诊断日志 ─────────────────────────────────────────────────────────
-_DIAG_LOG = None
-
-def _diag(msg: str) -> None:
-    global _DIAG_LOG
-    if _DIAG_LOG is None:
-        try:
-            log_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "AeroBridge"
-            log_dir.mkdir(parents=True, exist_ok=True)
-            _DIAG_LOG = open(str(log_dir / "diag.log"), "a", encoding="utf-8", buffering=1)
-        except Exception:
-            _DIAG_LOG = False
-            return
-    if _DIAG_LOG:
-        from datetime import datetime
-        ts = datetime.now().strftime("%H:%M:%S.%f")[:12]
-        _DIAG_LOG.write(f"[{ts}] {msg}\n")
-        _DIAG_LOG.flush()
+# ── 诊断日志（使用共享模块）─────────────────────────────────────
+from core.diag_logger import diag as _diag
 
 # ── 默认端口 ────────────────────────────────────────────────────────
 DEFAULT_TELEMETRY_PORT = 12345

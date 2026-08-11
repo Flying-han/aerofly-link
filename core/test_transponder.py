@@ -8,10 +8,10 @@ TransponderController 双轨制测试
 运行前请先启动 Mock DLL Server::
 
     # 终端 1：启动 Mock DLL（支持模式写入）
-    python -m aerobridge.core.mock_dll_server
+    python -m aerofly_link.core.mock_dll_server
 
     # 终端 2：运行本测试
-    python -m aerobridge.core.test_transponder
+    python -m aerofly_link.core.test_transponder
 """
 
 from __future__ import annotations

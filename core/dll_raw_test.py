@@ -13,7 +13,7 @@ def _log(msg: str) -> None:
     line = f"[{ts}] {msg}"
     print(line)
     try:
-        log_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "AeroBridge"
+        log_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "AeroflyLink"
         log_dir.mkdir(parents=True, exist_ok=True)
         with open(str(log_dir / "diag.log"), "a", encoding="utf-8") as f:
             f.write(line + "\n")

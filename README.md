@@ -6,7 +6,7 @@ Aerofly Link is an unofficial community project. It is not affiliated with or en
 
 Aerofly FS 4 第三方联机客户端 — 桥接 FSD 协议服务器（VATSIM / 私有服务器），实现位置共享与 ATC 通讯。
 
-> **注意**：Aerofly FS 4 不支持注入外部飞机模型，因此其他联机玩家的飞机无法在 AFS4 内部显示。AeroBridge 通过内置的 HTML5 地图面板（Leaflet）来弥补这一限制，在地图上实时显示所有联机飞机的位置和航向。
+> **注意**：Aerofly FS 4 不支持注入外部飞机模型，因此其他联机玩家的飞机无法在 AFS4 内部显示。Aerofly Link 有一个地图面板来弥补这一限制。
 
 ## 功能
 
@@ -36,7 +36,7 @@ AeroflyLink/
 ├── main.py                         # 应用入口
 ├── main_window.py                  # 主窗口（连接页 + 工作区）
 ├── requirements.txt                # Python 依赖
-├── AeroBridge_folder.spec          # PyInstaller 打包配置
+├── aerofly_link_folder.spec        # PyInstaller 打包配置
 │
 ├── core/                           # 核心逻辑
 │   ├── fsd_client.py               # FSD 协议客户端（TCP, asyncio）
@@ -76,7 +76,7 @@ AeroflyLink/
 │   └── settings.example.json       # 配置模板
 │
 └── tools/                          # 工具脚本
-    └── aerobridge_setup.iss        # Inno Setup 脚本（备用）
+    └── aerofly_link_setup.iss      # Inno Setup 脚本（备用）
 ```
 
 ## 快速开始
@@ -103,7 +103,7 @@ python main.py
 
 ### 使用模拟 DLL 模式（无需 AFS4）
 
-1. 启动 AeroBridge
+1. 启动 Aerofly Link
 2. 在连接面板填入坐标（纬度/经度/高度）
 3. 点击"模拟DLL"按钮
 4. 连接 FSD 服务器
@@ -120,16 +120,16 @@ cmake -G "Visual Studio 17 2022" ..
 cmake --build . --config Release
 ```
 
-编译后将 `AeroBridgeDLL.dll` 放到 `Documents\Aerofly FS 4\external_dll\` 目录。
+编译后将 `AeroflyBridge.dll` 放到 `Documents\Aerofly FS 4\external_dll\` 目录。
 
 ### 打包发布
 
 ```bash
 # 1. 打包主程序
-pyinstaller AeroBridge_folder.spec --distpath dist --workpath build
+pyinstaller aerofly_link_folder.spec --distpath dist --workpath build
 
 # 2. 创建安装包数据
-#    将 dist/AeroBridge/ 打包为 installer/data/aerobridge.zip
+#    将 dist/AeroflyLink/ 打包为 installer/data/aerofly_link.zip
 #    将 AeroflyBridge.dll 打包为 installer/data/dll.zip
 
 # 3. 打包安装器
@@ -141,7 +141,7 @@ pyinstaller installer.spec --distpath dist --workpath build
 
 ```
 ┌─────────────┐     TCP 12345      ┌──────────────┐     TCP 6809     ┌──────────────┐
-│  Aerofly FS4 │ ────遥测JSON────→ │  AeroBridge   │ ────FSD协议────→ │  FSD Server  │
+│  Aerofly FS4 │ ────遥测JSON────→ │  Aerofly Link   │ ────FSD协议────→ │  FSD Server  │
 │  + Bridge DLL│ ←──命令JSON────── │   Client      │ ←──交通数据────  │ (VATSIM等)   │
 └─────────────┘     TCP 12346      └──────┬───────┘     TCP 6809     └──────────────┘
                                           │
@@ -208,7 +208,7 @@ compass_hdg = (90 - math_deg) % 360
 
 ## 诊断日志
 
-运行时日志写入 `%APPDATA%/AeroBridge/`：
+运行时日志写入 `%APPDATA%/Aerofly Link/`：
 
 | 文件 | 用途 |
 |------|------|

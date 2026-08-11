@@ -1,11 +1,11 @@
-; AeroBridge 安装包脚本 — Inno Setup 6
-; 编译: ISCC.exe aerobridge_setup.iss
+; Aerofly Link 安装包脚本 — Inno Setup 6
+; 编译: ISCC.exe aerofly_link_setup.iss
 
-#define MyAppName "AeroBridge"
+#define MyAppName "Aerofly Link"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "AeroBridge Team"
+#define MyAppPublisher "Aerofly Link Team"
 #define MyAppURL "https://github.com/jlgabriel/Aerofly-FS4-Bridge"
-#define MyAppExeName "AeroBridge.exe"
+#define MyAppExeName "AeroflyLink.exe"
 
 [Setup]
 AppId={{AERO-BRIDGE-DIST32-2026-AF4F-5D7E8F9A0B1C}}
@@ -19,7 +19,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist_installer
-OutputBaseFilename=AeroBridge_Setup_v1.0.0
+OutputBaseFilename=AeroflyLink_Setup_v1.0.0
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=classic
@@ -36,7 +36,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist_new34\AeroBridge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist_new34\AeroflyLink\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; 游戏 Bridge DLL — 备份一份到应用目录，方便手动复制
 Source: "..\installer\data\AeroflyBridge.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; 部署 DLL 到 Aerofly FS 4 的 external_dll 目录（游戏加载所需，卸载时保留）

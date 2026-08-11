@@ -29,9 +29,10 @@ if platform.system() == 'Windows':
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 from main_window import MainWindow
+from ui.styles import APP_QSS
 
 # ── 全局异常捕获 ──────────────────────────────────
-CRASH_LOG = Path(__file__).parent.parent / "crash.log" if not getattr(sys, 'frozen', False) else Path(os.environ.get("APPDATA", Path.home())) / "AeroBridge" / "crash.log"
+CRASH_LOG = Path(__file__).parent.parent / "crash.log" if not getattr(sys, 'frozen', False) else Path(os.environ.get("APPDATA", Path.home())) / "AeroflyLink" / "crash.log"
 
 def _excepthook(exc_type, exc_value, exc_tb):
     """捕获所有未处理的异常，写入 crash.log"""
@@ -62,62 +63,8 @@ def main():
     app.setApplicationName("Aerofly Link")
     app.setApplicationVersion("1.0.0")
 
-    # 全局深色主题样式
-    app.setStyleSheet("""
-        QMainWindow {
-            background-color: #1a1a1a;
-        }
-        QWidget {
-            background-color: #1e1e1e;
-            color: #e0e0e0;
-            font-size: 13px;
-        }
-        QGroupBox {
-            border: 1px solid #333;
-            border-radius: 6px;
-            margin-top: 12px;
-            padding-top: 14px;
-            font-size: 13px;
-            font-weight: bold;
-            color: #ccc;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 12px;
-            padding: 0 6px;
-            color: #aaa;
-        }
-        QLabel {
-            background-color: transparent;
-            color: #ccc;
-        }
-        QSplitter::handle {
-            background-color: #333;
-            width: 2px;
-        }
-        QSplitter::handle:hover {
-            background-color: #4CAF50;
-        }
-        QStatusBar {
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-            border-top: 1px solid #333;
-        }
-        QScrollBar:vertical {
-            background: #1e1e1e;
-            width: 10px;
-            border-radius: 5px;
-        }
-        QScrollBar::handle:vertical {
-            background: #555;
-            border-radius: 5px;
-            min-height: 30px;
-        }
-        QScrollBar::add-line:vertical,
-        QScrollBar::sub-line:vertical {
-            height: 0;
-        }
-    """)
+    # 全局深色主题样式（使用共享样式模块）
+    app.setStyleSheet(APP_QSS)
 
     # 创建主窗口
     window = MainWindow()

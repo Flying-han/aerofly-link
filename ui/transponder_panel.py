@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, QTimer, Qt
 from PyQt6.QtGui import QIntValidator
 
+from ui.styles import BTN_INFO_CSS
+
 
 class TransponderPanel(QGroupBox):
     """应答机控制面板"""
@@ -172,24 +174,7 @@ class TransponderPanel(QGroupBox):
 
         # --- IDENT 按钮 ---
         self.btn_ident = QPushButton("IDENT")
-        self.btn_ident.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 12px;
-                font-size: 14px;
-                font-weight: bold;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #2a2a2a;
-                color: #666;
-            }
-        """)
+        self.btn_ident.setStyleSheet(BTN_INFO_CSS)
         self.btn_ident.clicked.connect(self._on_ident_click)
         layout.addWidget(self.btn_ident)
 
@@ -258,8 +243,8 @@ class TransponderPanel(QGroupBox):
             QPushButton {
                 background-color: #4CAF50;
                 color: white;
-                padding: 12px;
-                font-size: 14px;
+                padding: 10px;
+                font-size: 13px;
                 font-weight: bold;
                 border: none;
                 border-radius: 4px;
@@ -272,20 +257,7 @@ class TransponderPanel(QGroupBox):
         """IDENT 5 秒后自动恢复"""
         self.btn_ident.setEnabled(True)
         self.btn_ident.setText("IDENT")
-        self.btn_ident.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 12px;
-                font-size: 14px;
-                font-weight: bold;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        self.btn_ident.setStyleSheet(BTN_INFO_CSS)
         self._ident_timer.stop()
 
     def _validate_squawk(self, code: str) -> bool:
