@@ -27,7 +27,7 @@ Aerofly FS 4 第三方联机客户端 — 桥接 FSD 协议服务器（VATSIM / 
 | UI 框架 | PyQt6 6.11 |
 | AF4 桥接 DLL | [外部开源 AeroflyBridge.dll](https://github.com/jlgabriel/Aerofly-FS4-Bridge)（见 ADR 0002） |
 | 打包 | PyInstaller 6.21 |
-| C 重写 | C11 + zig cc（`client-c/`，进行中，见 [docs/C_REWRITE_PLAN.md](docs/C_REWRITE_PLAN.md)） |
+| C 客户端 | C11 + Win32 + zig cc（`client-c/`，单文件 ~200KB，全功能对齐，见 [docs/C_REWRITE_PLAN.md](docs/C_REWRITE_PLAN.md)） |
 
 ## 项目结构
 
