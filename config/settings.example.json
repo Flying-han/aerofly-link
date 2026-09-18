@@ -1,12 +1,11 @@
 {
   "callsign": "",
   "cid": "",
-  "password": "",
   "realname": "",
   "server": "sweatbox.vatsim.net",
   "port": 6809,
   "model": "",
-  "rating": 1,
+  "rating": 2,
   "mock_lat": "",
   "mock_lon": "",
   "mock_alt": "",

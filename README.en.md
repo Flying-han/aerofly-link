@@ -8,8 +8,9 @@ Aerofly Link is an unofficial community project. It is not affiliated with or en
 
 - FSD server connectivity for position sharing and ATC text communication
 - Local telemetry and command bridge for Aerofly FS 4
-- Built-in Leaflet traffic map
+- Nearby-traffic awareness (10 nm great-circle range)
 - Transponder controls and flight-plan submission
+- Native C rewrite in progress (`client-c/`, see docs/C_REWRITE_PLAN.md)
 - Mock DLL mode for development without Aerofly FS 4
 
 ## Quick start

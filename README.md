@@ -6,15 +6,15 @@ Aerofly Link is an unofficial community project. It is not affiliated with or en
 
 Aerofly FS 4 第三方联机客户端 — 桥接 FSD 协议服务器（VATSIM / 私有服务器），实现位置共享与 ATC 通讯。
 
-> **注意**：Aerofly FS 4 不支持注入外部飞机模型，因此其他联机玩家的飞机无法在 AFS4 内部显示。Aerofly Link 有一个地图面板来弥补这一限制。
+> **注意**：Aerofly FS 4 不支持注入外部飞机模型，其他联机玩家的飞机无法在 AFS4 内部显示。
 
 ## 功能
 
 - **FSD 协议联机** — 连接 VATSIM 或任何兼容 FSD 协议的服务器
 - **实时位置共享** — 将 AFS4 飞机位置（经纬度、高度、航向、速度）上报到 FSD 服务器
-- **内置地图面板** — 基于 Leaflet 的 HTML5 地图，显示本机和其他联机飞机
-- **应答机控制** — 双轨制应答机（虚拟状态 + DLL 写入），支持 STBY/ALT/IDENT 模式
-- **ATC 通讯** — 接收和发送文本通讯
+- **应答机控制** — 双轨制应答机（虚拟状态 + DLL 写入尽力而为），支持 STBY/ALT/IDENT 模式
+- **ATC 通讯** — 接收和发送文本消息（`@呼号 消息`，缺省发往 UNICOM）
+- **附近飞机提示** — 基于大圆距离的 10nm 范围统计
 - **飞行计划** — 自动发送最小飞行计划（$FP），确保被服务器纳入广播列表
 - **模拟 DLL 模式** — 无需启动 AFS4 即可测试联机功能
 - **安装向导** — 内置 PyQt6 安装器，一键部署应用和 AF4 Bridge DLL
@@ -25,9 +25,9 @@ Aerofly FS 4 第三方联机客户端 — 桥接 FSD 协议服务器（VATSIM / 
 |------|------|
 | 核心通信 | Python 3.13 + asyncio |
 | UI 框架 | PyQt6 6.11 |
-| 地图面板 | QWebEngineView + Leaflet.js |
-| AF4 桥接 DLL | C++ (AeroflyBridge.dll) |
+| AF4 桥接 DLL | [外部开源 AeroflyBridge.dll](https://github.com/jlgabriel/Aerofly-FS4-Bridge)（见 ADR 0002） |
 | 打包 | PyInstaller 6.21 |
+| C 重写 | C11 + zig cc（`client-c/`，进行中，见 [docs/C_REWRITE_PLAN.md](docs/C_REWRITE_PLAN.md)） |
 
 ## 项目结构
 
@@ -49,16 +49,22 @@ AeroflyLink/
 │   └── test_*.py                   # 单元测试
 │
 ├── ui/                             # 用户界面
-│   ├── connection_panel.py         # 连接配置面板
 │   ├── connect_page.py             # 连接页面
+│   ├── workspace.py                # 工作区侧边栏
+│   ├── status_bar.py               # 底部状态栏
 │   ├── transponder_panel.py        # 应答机面板
 │   ├── flightplan_panel.py         # 飞行计划面板
-│   └── log_panel.py                # 日志面板
+│   ├── log_panel.py                # 通讯日志面板
+│   └── styles.py                   # 共享 QSS 样式
 │
-├── assets/                         # 地图资源
-│   ├── map.html                    # Leaflet 地图页面
-│   ├── leaflet.css / leaflet.js    # Leaflet 库
-│   └── images/                     # 地图图标
+├── tests/                          # pytest 单元测试 + UI 截图冒烟
+│
+├── client-c/                       # C 重写（协议层，见 docs/C_REWRITE_PLAN.md）
+│
+├── docs/                           # 文档
+│   ├── adr/                        # 架构决策记录（ADR）
+│   ├── C_REWRITE_PLAN.md           # C 重写架构与开发计划
+│   └── RELEASE.md                  # 发布清单
 │
 ├── dll/                            # AF4 Bridge DLL (C++)
 │   ├── dll_main.cpp                # DLL 入口
@@ -108,19 +114,12 @@ python main.py
 3. 点击"模拟DLL"按钮
 4. 连接 FSD 服务器
 
-### 构建 AF4 Bridge DLL
+### AF4 Bridge DLL
 
-> **注意**：本项目使用开源的 [AeroflyBridge.dll](https://github.com/jlgabriel/Aerofly-FS4-Bridge) (v0.3.1+)。
-> 如果你的 AFS4 是正版，可以直接使用官方发布的 DLL。非正版需要 hex-patch 导出名 `Aerofly_FS_4_` → `Aerofly_FS_2_`。
-
-```bash
-cd dll
-mkdir build && cd build
-cmake -G "Visual Studio 17 2022" ..
-cmake --build . --config Release
-```
-
-编译后将 `AeroflyBridge.dll` 放到 `Documents\Aerofly FS 4\external_dll\` 目录。
+> 本项目使用开源的 [AeroflyBridge.dll](https://github.com/jlgabriel/Aerofly-FS4-Bridge) (v0.3.1+)。
+> 将其放入 `Documents\Aerofly FS 4\external_dll\` 目录（安装器会自动完成）。
+> 仓库内的 `dll/` 目录是**参考脚手架**，其协议与在用 DLL 不兼容，勿编译使用（见 ADR 0002）。
+> 非正版 AFS4 需要 hex-patch 导出名 `Aerofly_FS_4_` → `Aerofly_FS_2_`，或使用内置「模拟DLL」模式。
 
 ### 打包发布
 
@@ -147,8 +146,6 @@ pyinstaller installer.spec --distpath dist --workpath build
                                           │
                                     ┌─────┴──────┐
                                     │  PyQt6 UI  │
-                                    │  + Leaflet │
-                                    │  地图面板   │
                                     └────────────┘
 ```
 
@@ -187,11 +184,10 @@ compass_hdg = (90 - math_deg) % 360
 {
   "callsign": "YOUR_CALLSIGN",
   "cid": "YOUR_VATSIM_CID",
-  "password": "YOUR_PASSWORD",
   "realname": "Your Name",
   "server": "sweatbox.vatsim.net",
   "port": 6809,
-  "rating": 1,
+  "rating": 2,
   "mock_lat": "31.1434",
   "mock_lon": "121.8082",
   "mock_alt": "3500"
@@ -202,25 +198,38 @@ compass_hdg = (90 - math_deg) % 360
 |------|------|
 | `callsign` | 飞行员呼号（如 `AAL123`） |
 | `cid` | VATSIM CID 或服务器用户名 |
-| `password` | VATSIM 密码或服务器密码 |
-| `rating` | 飞行员等级（1=OBS, 2=S1, 3=S2, 4=S3） |
+| `password` | ⚠️ 仅在界面输入，**不会保存到该文件**（见 ADR 0003） |
+| `rating` | 飞行员等级（2=S1 默认，1=OBS；服务器会校验 CID 与等级匹配） |
 | `mock_lat/lon/alt` | 模拟 DLL 模式下的初始坐标 |
 
-## 诊断日志
+## 诊断与日志
 
-运行时日志写入 `%APPDATA%/Aerofly Link/`：
+发布版默认安静（不写诊断日志）。排障时按维护者指引设置环境变量后重现问题：
 
-| 文件 | 用途 |
+| 环境变量 | 作用 |
 |------|------|
-| `diag.log` | DLL 桥接诊断（连接状态、遥测帧、航向值） |
-| `fsd_packets.log` | FSD 位置报告日志（PBH、坐标、高度、速度） |
-| `crash.log` | 未捕获异常记录 |
+| `AEROFLYLINK_DIAG=1` | 启用 `%APPDATA%/AeroflyLink/diag.log`（DLL 桥接逐帧诊断） |
+| `AEROFLYLINK_DEBUG=1` | 在通讯日志中显示 FSD 协议原始报文 |
+
+`crash.log`（未捕获异常）始终在异常时写入 `%APPDATA%/AeroflyLink/`。
+
+## 开发
+
+```bash
+# 单元测试（53 用例）
+python -m pytest tests core -q
+
+# UI 截图冒烟（离屏构建主窗口 + Mock 链路）
+python tests/smoke_ui.py
+
+# C 协议层测试（需 zig）
+cd client-c && build.cmd
+```
 
 ## 致谢
 
 - [AeroflyBridge.dll](https://github.com/jlgabriel/Aerofly-FS4-Bridge) — jlgabriel 的开源 AFS4 桥接 DLL
-- [Swift](https://github.com/swift-project/swift) — FSD 协议参考实现
-- [Leaflet](https://leafletjs.com/) — 开源 JavaScript 地图库
+- [Swift](https://github.com/swift-project/swift) — FSD 协议参考实现（C 重写的行为参照，见 ADR 0001）
 
 ## License
 
