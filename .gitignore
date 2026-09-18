@@ -16,9 +16,10 @@ dist_new*/
 dist_diag/
 dist_installer/
 
-# C++ build artifacts
+# C/C++ build artifacts
 dll/build/
 dll/output/
+client-c/build/
 *.obj
 *.dll.a
 *.exe

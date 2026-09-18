@@ -19,3 +19,14 @@ jobs:
   # 注：仓库内 dll/ 目录是「参考脚手架」，生产使用外部开源 AeroflyBridge.dll
   # （协议与客户端不兼容，见 docs/adr/0002-external-bridge-dll.md），
   # 因此不再在 CI 中编译它。
+  c-core:
+    # client-c 协议层骨架防烂尾（docs/C_REWRITE_PLAN.md P0）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+      - name: Build & test core protocol layer
+        shell: cmd
+        run: client-c\build.cmd
