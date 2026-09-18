@@ -2,9 +2,9 @@
 ; 编译: ISCC.exe aerofly_link_setup.iss
 
 #define MyAppName "Aerofly Link"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"  ; 与 core/__init__.py 的 __version__ 保持一致
 #define MyAppPublisher "Aerofly Link Team"
-#define MyAppURL "https://github.com/jlgabriel/Aerofly-FS4-Bridge"
+#define MyAppURL "https://github.com/Flying-han/aerofly-link"
 #define MyAppExeName "AeroflyLink.exe"
 
 [Setup]
@@ -19,7 +19,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist_installer
-OutputBaseFilename=AeroflyLink_Setup_v1.0.0
+OutputBaseFilename=AeroflyLink_Setup_v1.1.0
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=classic
@@ -36,7 +36,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist_new34\AeroflyLink\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\AeroflyLink\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; 游戏 Bridge DLL — 备份一份到应用目录，方便手动复制
 Source: "..\installer\data\AeroflyBridge.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; 部署 DLL 到 Aerofly FS 4 的 external_dll 目录（游戏加载所需，卸载时保留）

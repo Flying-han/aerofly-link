@@ -192,11 +192,6 @@ class TransponderPanel(QGroupBox):
         self.lbl_warning.hide()
         layout.addWidget(self.lbl_warning)
 
-        # --- DLL 写入能力状态 ---
-        self.lbl_dll_status = QLabel("DLL: 检测中...")
-        self.lbl_dll_status.setStyleSheet("color: gray; font-size: 10px;")
-        layout.addWidget(self.lbl_dll_status)
-
         layout.addStretch()
 
     # ──────────────────────────────────────────────
@@ -299,15 +294,3 @@ class TransponderPanel(QGroupBox):
         self.lbl_warning.show()
         # 5 秒后自动清除
         QTimer.singleShot(5000, self.lbl_warning.hide)
-
-    def update_dll_status(self, can_write_mode: bool | None):
-        """更新 DLL 写入能力状态"""
-        if can_write_mode is None:
-            self.lbl_dll_status.setText("DLL: 检测中...")
-            self.lbl_dll_status.setStyleSheet("color: gray; font-size: 10px;")
-        elif can_write_mode:
-            self.lbl_dll_status.setText("DLL: ✓ 已连接，支持模式写入")
-            self.lbl_dll_status.setStyleSheet("color: green; font-size: 10px;")
-        else:
-            self.lbl_dll_status.setText("DLL: ✗ 不支持模式写入（已降级）")
-            self.lbl_dll_status.setStyleSheet("color: #ff9800; font-size: 10px;")

@@ -74,8 +74,8 @@ async def run_test():
     logger.info("=" * 60)
     logger.info("连接 Mock DLL Bridge...")
     await bridge.connect()
-    logger.info("DLL Bridge 已连接: telemetry=%s command=%s",
-                bridge.is_telemetry_connected, bridge.is_command_connected)
+    logger.info("DLL Bridge 已连接: telemetry=%s",
+                bridge.is_telemetry_connected)
 
     # 启动同步检测
     xpdr.start_sync_check()

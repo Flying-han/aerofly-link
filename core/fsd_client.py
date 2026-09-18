@@ -52,14 +52,12 @@ class FSDClient(QObject):
       - status_changed(str, str)     状态变更 (status, message)
       - message_received(str, str, str) 文本消息 (source, dest, text)
       - traffic_updated(list)         其他飞机列表
-      - telemetry_updated(dict)       自身遥测（转发 DLL 数据，用于地图）
     """
 
     # === PyQt 信号 ===
     status_changed = pyqtSignal(str, str)         # status, message
     message_received = pyqtSignal(str, str, str)  # source, dest, text
     traffic_updated = pyqtSignal(list)             # list of aircraft dicts
-    telemetry_updated = pyqtSignal(dict)           # 自身飞行数据
     debug_line = pyqtSignal(str)                   # 协议调试输出（>>>/<<<）
 
     def __init__(self, config: dict):
@@ -107,7 +105,7 @@ class FSDClient(QObject):
 
         # 飞行员等级（从连接面板配置，默认 OBS=1）
         # 服务器会验证 rating 是否匹配 CID，过高会被拒绝
-        self._rating: int = int(config.get("rating", DEFAULT_RATING))
+        self._rating: int = int(config.get("rating") or DEFAULT_RATING)
 
         # 运行时状态
         self._reader: Optional[asyncio.StreamReader] = None
@@ -121,9 +119,6 @@ class FSDClient(QObject):
 
         # 在线飞机列表
         self._traffic: dict[str, dict] = {}
-
-        # 接收缓冲
-        self._recv_buffer = b""
 
         # Keepalive 心跳（FSD 服务器会关闭空闲连接）
         self._keepalive_task: Optional[asyncio.Task] = None
@@ -142,6 +137,17 @@ class FSDClient(QObject):
         self._last_sent_xpdr: str = "1200"
         self._last_sent_mode: str = "N"
         self._has_sent_position: bool = False
+
+        # traffic 信号节流：多机高频 @ 包下每秒最多向 UI 发一次全量列表
+        self._last_traffic_emit: float = 0.0
+        self._traffic_emit_interval: float = 1.0
+
+    def _emit_traffic(self):
+        """按节流间隔向 UI 发送当前飞机列表。"""
+        now = time.monotonic()
+        if now - self._last_traffic_emit >= self._traffic_emit_interval:
+            self._last_traffic_emit = now
+            self.traffic_updated.emit(list(self._traffic.values()))
 
     # ── 连接管理 ──────────────────────────────────────────────────
 
@@ -487,27 +493,6 @@ class FSDClient(QObject):
         self._last_sent_mode = mode_letter
         self._has_sent_position = True
 
-        # ── FSD 包诊断日志 ──
-        # 每 10 次位置报告打印一次完整 @ 包，含 PBH 解码航向，便于排查朝向/可见性问题
-        if not hasattr(self, "_pos_rpt_count"):
-            self._pos_rpt_count = 0
-        self._pos_rpt_count += 1
-        if self._pos_rpt_count <= 3 or self._pos_rpt_count % 10 == 0:
-            try:
-                _p, _b, _h, _og = unpack_pbh(pbh)
-                import os as _os
-                from pathlib import Path as _P
-                _log_dir = _P(_os.environ.get("APPDATA", _P.home() / "AppData" / "Roaming")) / "AeroflyLink"
-                _log_dir.mkdir(parents=True, exist_ok=True)
-                with open(str(_log_dir / "fsd_packets.log"), "a", encoding="utf-8") as _f:
-                    from datetime import datetime as _dt
-                    _f.write(f"[{_dt.now().strftime('%H:%M:%S')}] #{self._pos_rpt_count} "
-                             f"hdg_in={hdg:.1f}° pbh={pbh} -> decoded_hdg={_h:.1f}° "
-                             f"alt={alt_int}ft gs={gs_int}kt "
-                             f"lat={lat_str} lon={lon_str} mode={mode_letter}\n")
-            except Exception:
-                pass
-
     # ── 飞行计划 ──────────────────────────────────────────────────
 
     async def send_flight_plan(self, plan: dict) -> bool:
@@ -641,6 +626,29 @@ class FSDClient(QObject):
                      self.callsign, dep, dest, aircraft_full)
         return True
 
+    # ── 文本通讯 ──────────────────────────────────────────────────
+
+    async def send_text_message(self, dest: str, text: str) -> bool:
+        """
+        发送 #TM 文本消息（ATC / UNICOM / 私聊）。
+
+        :param dest: 目标，通常是管制呼号（如 ZGGG_TWR）或 UNICOM 122.800
+        :param text: 消息正文（不可包含 FSD 分隔符 ':'，会被替换为空格）
+        :return: True 表示已发送
+        """
+        if not self._connected or not self._auth_ok:
+            logger.warning("Cannot send text message: not connected")
+            return False
+        dest = (dest or "").strip()
+        text = (text or "").replace(":", " ").strip()
+        if not dest or not text:
+            return False
+        tm_line = f"#TM{self.callsign}:{dest}:{text}"
+        self.debug_line.emit(f">>> {tm_line}")
+        await self._send_line(tm_line)
+        logger.info("Text message sent [%s → %s]: %s", self.callsign, dest, text)
+        return True
+
     # ── 内部方法 ──────────────────────────────────────────────────
 
     def _build_ident_line(self) -> str:
@@ -729,6 +737,7 @@ class FSDClient(QObject):
                     break
                 if self.type == "legacy":
                     keep_line = f"#TM{self.callsign}:SERVER:@"
+                    k_alt = k_gs = k_pbh = 0  # legacy 心跳不携带位置数据
                 else:
                     # 使用缓存的最后有效位置坐标
                     if self._last_valid_position_set:
@@ -1084,7 +1093,7 @@ class FSDClient(QObject):
                         pass
 
                 self._traffic[callsign] = traffic_info
-                self.traffic_updated.emit(list(self._traffic.values()))
+                self._emit_traffic()
         except Exception:
             pass  # 解析失败忽略
 
@@ -1156,7 +1165,7 @@ class FSDClient(QObject):
                 pass
 
             self._traffic[callsign] = traffic_info
-            self.traffic_updated.emit(list(self._traffic.values()))
+            self._emit_traffic()
         except Exception:
             pass  # 解析失败忽略
 
@@ -1166,7 +1175,7 @@ class FSDClient(QObject):
         callsign = line[3:].strip()
         if callsign in self._traffic:
             del self._traffic[callsign]
-            self.traffic_updated.emit(list(self._traffic.values()))
+            self._emit_traffic()
 
     # 坐标解析已迁移至 core/fsd_protocol.py 的 parse_coord / decimal_to_packed_coord
 

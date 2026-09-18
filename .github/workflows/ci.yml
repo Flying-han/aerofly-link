@@ -13,13 +13,9 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m compileall main.py main_window.py core ui
-      - run: python -m pytest core -q
+      - run: python -m compileall main.py main_window.py core ui installer
+      - run: python -m pytest tests core -q
 
-  cmake:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: lukka/get-cmake@latest
-      - run: cmake -S dll -B dll/build -A x64
-      - run: cmake --build dll/build --config Release
+  # 注：仓库内 dll/ 目录是「参考脚手架」，生产使用外部开源 AeroflyBridge.dll
+  # （协议与客户端不兼容，见 docs/adr/0002-external-bridge-dll.md），
+  # 因此不再在 CI 中编译它。

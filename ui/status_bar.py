@@ -26,7 +26,7 @@ class StatusBar(QStatusBar):
         self._add_separator()
 
         # 应答机状态
-        self.lbl_xpdr = QLabel("应答机: STBY 7000")
+        self.lbl_xpdr = QLabel("应答机: ALT 1200")
         self.lbl_xpdr.setStyleSheet("color: #e0e0e0; padding: 0 5px;")
         self.addWidget(self.lbl_xpdr)
 

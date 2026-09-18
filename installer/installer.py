@@ -23,7 +23,7 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 
 # ── 常量 ──────────────────────────────────────────────
 APP_NAME = "Aerofly Link"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"  # 与 core/__init__.py 的 __version__ 保持一致
 PUBLISHER = "Aerofly Link"
 
 REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AeroflyLink"
@@ -508,11 +508,12 @@ class InstallerWizard(QWidget):
             raise FileNotFoundError("找不到 DLL 包 dll.zip")
 
         # 目标 1: 游戏目录 external_dll（用户选择的 AF4 安装目录）
+        # 注：安装器为普通 QWidget，无信号可用；进度反馈由 _do_install 的
+        # _update_status 统一驱动，此处不做逐条状态输出。
         dll_dir1 = os.path.join(self.af4_dir, "external_dll")
         os.makedirs(dll_dir1, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(dll_dir1)
-        self.progress_signal.emit(f"  ✓ DLL 已安装到游戏目录: {dll_dir1}")
 
         # 目标 2: Documents\Aerofly FS 4\external_dll（正版默认路径，双保险）
         docs = os.path.join(os.environ.get("USERPROFILE", ""), "Documents")
@@ -521,7 +522,6 @@ class InstallerWizard(QWidget):
             os.makedirs(dll_dir2, exist_ok=True)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(dll_dir2)
-            self.progress_signal.emit(f"  ✓ DLL 也已安装到 Documents: {dll_dir2}")
 
     def _step_create_shortcuts(self):
         exe_path = os.path.join(self.install_dir, "Aerofly Link.exe")

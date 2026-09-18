@@ -63,6 +63,8 @@ class ConnectPage(QFrame):
             }
         """)
         self._connected = False
+        # rating 无 UI 控件：从 settings.json 读取（高级配置），未配置时由 FSDClient 用默认值
+        self._saved_rating = None
         self._servers_by_eco = {
             eco: list(items) for eco, items in SERVERS_BY_ECO.items()
         }
@@ -369,6 +371,7 @@ class ConnectPage(QFrame):
             "callsign": self.input_callsign.text().upper().strip(),
             "cid": self.input_cid.text().strip(),
             "password": self.input_password.text(),
+            "rating": self._saved_rating,
             "realname": self.input_realname.text().strip(),
             "server": host,
             "port": port,
@@ -437,6 +440,12 @@ class ConnectPage(QFrame):
 
         saved_servers = settings.get("servers")
         self._set_servers(saved_servers if saved_servers else SERVERS_BY_ECO)
+
+        # 高级字段：飞行员等级（见 README 配置说明）
+        try:
+            self._saved_rating = int(settings["rating"]) if settings.get("rating") else None
+        except (TypeError, ValueError):
+            self._saved_rating = None
 
         eco = settings.get("eco")
         ctype = settings.get("type")

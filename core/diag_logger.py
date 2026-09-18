@@ -5,6 +5,8 @@
 统一管理 %APPDATA%/AeroflyLink/diag.log 的写入，
 避免在多个文件中重复定义 _diag() 函数。
 
+默认关闭；设置环境变量 AEROFLYLINK_DIAG=1 启用（排障用）。
+
 线程安全：使用 threading.Lock 保护文件句柄。
 """
 import os
@@ -14,6 +16,10 @@ from datetime import datetime
 
 _lock = threading.Lock()
 _file_handle = None  # type: ignore
+
+# 诊断日志默认关闭（发布版安静、不写盘、不暴露内部细节）。
+# 排障时设置环境变量 AEROFLYLINK_DIAG=1 重新启用。
+_enabled = os.environ.get("AEROFLYLINK_DIAG", "") == "1"
 
 
 def _ensure_handle():
@@ -33,7 +39,9 @@ def _ensure_handle():
 
 
 def diag(msg: str) -> None:
-    """写入一条诊断日志。线程安全，失败时静默忽略。"""
+    """写入一条诊断日志。线程安全，失败时静默忽略；未启用时为 no-op。"""
+    if not _enabled:
+        return
     with _lock:
         _ensure_handle()
         if _file_handle:

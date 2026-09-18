@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 from main_window import MainWindow
 from ui.styles import APP_QSS
+from core import __version__
 
 # ── 全局异常捕获 ──────────────────────────────────
 CRASH_LOG = Path(__file__).parent.parent / "crash.log" if not getattr(sys, 'frozen', False) else Path(os.environ.get("APPDATA", Path.home())) / "AeroflyLink" / "crash.log"
@@ -61,7 +62,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("Aerofly Link")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(__version__)
 
     # 全局深色主题样式（使用共享样式模块）
     app.setStyleSheet(APP_QSS)

@@ -13,7 +13,6 @@ Aerofly Link 主窗口类
 """
 import json
 import asyncio
-import socket
 import os
 from pathlib import Path
 from typing import Optional
@@ -23,6 +22,7 @@ from core.async_worker import AsyncWorker
 from core.dll_bridge import DLLBridge, Telemetry
 from core.transponder_controller import TransponderController
 from core.mock_server import MockServer
+from core.fsd_protocol import distance_nm
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout,
@@ -116,9 +116,10 @@ class MainWindow(QMainWindow):
 
     def _init_timers(self):
         """初始化所有定时器"""
+        # 4Hz 轮询足够驱动状态栏文字显示（遥测本身在 DLL 接收线程持续更新）
         self.telemetry_timer = QTimer(self)
         self.telemetry_timer.timeout.connect(self._read_telemetry)
-        self.telemetry_timer.start(100)  # 10Hz
+        self.telemetry_timer.start(250)
 
         self.position_report_timer = QTimer(self)
         self.position_report_timer.timeout.connect(self._send_position_report)
@@ -153,6 +154,9 @@ class MainWindow(QMainWindow):
 
         # 飞行计划面板信号
         ws.flightplan_panel.flight_plan_submitted.connect(self._on_flight_plan_submit)
+
+        # 通讯日志面板信号
+        ws.log_panel.message_send_requested.connect(self._on_send_text_message)
 
         # Callsign + Realname 同步到飞行计划面板
         cp.input_callsign_widget.textChanged.connect(
@@ -208,9 +212,11 @@ class MainWindow(QMainWindow):
         self.fsd_client.status_changed.connect(
             lambda s, m, g=gen: self._on_connection_status_change_if_current(s, m, g)
         )
-        self.fsd_client.debug_line.connect(
-            lambda line: self.workspace.log_panel.add_message("FSD", "DEBUG", line)
-        )
+        # 协议原始报文只在显式开启调试时显示（发布版默认安静，不向界面暴露协议细节）
+        if os.environ.get("AEROFLYLINK_DEBUG"):
+            self.fsd_client.debug_line.connect(
+                lambda line: self.workspace.log_panel.add_message("FSD", "DEBUG", line, kind="system")
+            )
 
         self.transponder.fsd_client = self.fsd_client
         AsyncWorker.run_async(self.fsd_client.connect())
@@ -273,7 +279,10 @@ class MainWindow(QMainWindow):
                     "lat": t.lat, "lon": t.lon, "alt_m": t.alt_m,
                     "hdg_true": t.hdg_true, "gs_kts": t.gs_kts,
                 }
-                self.telemetry_updated.emit(data)
+                # 数据无变化时跳过信号发射（停靠/未连接时避免空转刷新）
+                if data != getattr(self, "_last_telemetry_data", None):
+                    self._last_telemetry_data = data
+                    self.telemetry_updated.emit(data)
         except Exception as e:
             _diag(f"_read_telemetry ERROR: {e}")
 
@@ -306,9 +315,15 @@ class MainWindow(QMainWindow):
         result = await self.transponder.sync_check()
         if not result.get("synced", True):
             for warning in result.get("warnings", []):
-                self.workspace.transponder_panel.show_warning(warning)
+                # 去重：同一警告持续存在时不重复弹（面板 5s 自动隐藏，重复弹等于常驻骚扰）
+                if warning != getattr(self, "_last_sync_warning", None):
+                    self._last_sync_warning = warning
+                    self.workspace.transponder_panel.show_warning(warning)
+        else:
+            self._last_sync_warning = None
 
     def _check_dll_health(self):
+        """刷新状态栏 DLL 状态（完全依据 dll_bridge 的连接状态，不做任何阻塞探测）。"""
         conn = self.dll_bridge.is_telemetry_connected
         if conn:
             if self._mock_enabled:
@@ -325,8 +340,16 @@ class MainWindow(QMainWindow):
         elif self._mock_enabled and self._mock_server is not None:
             self.status_bar.set_dll_status("Mock: ○ 启动中...", "orange", "模拟 DLL 服务器正在启动...")
         else:
-            status_msg, tooltip = self._probe_dll_port()
-            self.status_bar.set_dll_status(status_msg, "gray", tooltip)
+            # dll_bridge 内部维护自动重连（指数退避），无需在 UI 线程探测端口
+            self.status_bar.set_dll_status(
+                "DLL: ○ 等待游戏", "gray",
+                "尚未连接遥测端口 12345 — dll_bridge 正在后台自动重连\n"
+                "请确认：\n"
+                "1. 启动 Aerofly FS 4 并进入驾驶舱\n"
+                "2. AeroflyBridge.dll 已放入 external_dll 文件夹\n"
+                "3. 非正版游戏可能不支持 external DLL API\n"
+                "提示: 先启动游戏再启动 Aerofly Link（连接后状态自动刷新）"
+            )
 
     def _toggle_mock_server(self, checked: bool):
         if checked:
@@ -336,6 +359,7 @@ class MainWindow(QMainWindow):
 
     def _start_mock_server(self):
         self._mock_enabled = True
+        self.status_bar.btn_mock.setChecked(True)
         config = self.connect_page.get_config()
         try:
             mock_lat = float(config.get("mock_lat") or "51.4775")
@@ -377,6 +401,7 @@ class MainWindow(QMainWindow):
 
     def _stop_mock_server(self):
         self._mock_enabled = False
+        self.status_bar.btn_mock.setChecked(False)
 
         async def _stop():
             if self._mock_server:
@@ -387,22 +412,6 @@ class MainWindow(QMainWindow):
                 AsyncWorker.run_async(self.dll_bridge.connect())
 
         AsyncWorker.run_async(_stop())
-
-    def _probe_dll_port(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.5)
-        try:
-            sock.connect(("127.0.0.1", 12345))
-            sock.close()
-            return ("DLL: ○ 握手中...",
-                    "端口 12345 已开放，正在建立遥测连接...\n如果持续此状态，请重启 Aerofly FS 4")
-        except (ConnectionRefusedError, OSError):
-            return ("DLL: ● 未连接",
-                    "端口 12345 未开放 — 请确认：\n"
-                    "1. 启动 Aerofly FS 4 并进入驾驶舱\n"
-                    "2. AeroflyBridge.dll 已放入 external_dll 文件夹\n"
-                    "3. 非正版游戏可能不支持 external DLL API\n"
-                    "提示: 先启动游戏再启动 Aerofly Link")
 
     # ──────────────────────────────────────────────
     # 信号槽处理
@@ -426,7 +435,7 @@ class MainWindow(QMainWindow):
             self.status_bar.set_callsign(f"呼号: {self.connect_page.get_config().get('callsign', '---')}")
             self.connect_page.set_connected(True)
             self.left_stack.setCurrentIndex(1)
-            ws.log_panel.add_message("Aerofly Link", "SYSTEM", message)
+            ws.log_panel.add_message("Aerofly Link", "SYSTEM", message, kind="system")
 
         elif status == "disconnected":
             self.status_bar.set_connection_status("● 未连接", "gray")
@@ -437,7 +446,7 @@ class MainWindow(QMainWindow):
             self.connect_page.set_connecting(False)
             ws.set_connected_display(False)
             self.left_stack.setCurrentIndex(0)
-            ws.log_panel.add_message("Aerofly Link", "SYSTEM", message)
+            ws.log_panel.add_message("Aerofly Link", "SYSTEM", message, kind="system")
             if not self._user_disconnect:
                 QMessageBox.warning(self, "连接已断开", f"与服务器的连接意外断开：\n\n{message}")
             self._user_disconnect = False
@@ -451,20 +460,60 @@ class MainWindow(QMainWindow):
             self.connect_page.set_connecting(False)
             ws.set_connected_display(False)
             self.left_stack.setCurrentIndex(0)
-            ws.log_panel.add_message("FSD", "ERROR", message)
+            ws.log_panel.add_message("FSD", "ERROR", message, kind="system")
             QMessageBox.critical(self, "连接失败", f"无法连接到服务器：\n\n{message}")
 
         elif status == "connecting":
             self.status_bar.set_connection_status("● 连接中...", "orange")
-            ws.log_panel.add_message("Aerofly Link", "SYSTEM", message)
+            ws.log_panel.add_message("Aerofly Link", "SYSTEM", message, kind="system")
 
     def _on_atc_message(self, source: str, dest: str, message: str):
-        self.workspace.log_panel.add_message(source, dest, message)
+        self.workspace.log_panel.add_message(source, dest, message, kind="in")
+
+    def _on_send_text_message(self, text: str):
+        """用户在通讯日志面板发送消息。支持「@目标 消息」语法，缺省目标为 UNICOM。"""
+        if not self.fsd_client:
+            self.workspace.log_panel.add_message(
+                "Aerofly Link", "SYSTEM", "未连接到服务器，无法发送消息", kind="system")
+            return
+        text = text.strip()
+        if text.startswith("@"):
+            body = text[1:]
+            dest, _, content = body.partition(" ")
+            if not content:
+                dest, content = "UNICOM", body
+        else:
+            dest, content = "UNICOM", text
+        AsyncWorker.run_async(self._do_send_text_message(dest, content))
+
+    async def _do_send_text_message(self, dest: str, content: str):
+        try:
+            ok = await self.fsd_client.send_text_message(dest, content)
+            if ok:
+                self.workspace.log_panel.add_message("me", dest, content, kind="out")
+            else:
+                self.workspace.log_panel.add_message(
+                    "Aerofly Link", "SYSTEM", "消息发送失败", kind="system")
+        except Exception as e:
+            self.workspace.log_panel.add_message(
+                "Aerofly Link", "SYSTEM", f"消息发送失败: {e}", kind="system")
 
     def _on_traffic_update(self, traffic: list):
-        nearby = [t for t in traffic if t.get("distance_nm", 999) < 10]
-        if nearby:
-            self.statusBar().showMessage(f"附近 {len(nearby)} 架飞机", 3000)
+        own = self.dll_bridge.latest_telemetry
+        if not own or (own.lat == 0.0 and own.lon == 0.0):
+            return
+        nearby = 0
+        for ac in traffic:
+            try:
+                if distance_nm(own.lat, own.lon, float(ac["lat"]), float(ac["lon"])) < 10:
+                    nearby += 1
+            except (KeyError, TypeError, ValueError):
+                continue
+        # 仅在数量变化时提示，避免高频重置状态栏消息计时器
+        if nearby != getattr(self, "_last_nearby_count", -1):
+            self._last_nearby_count = nearby
+            if nearby:
+                self.statusBar().showMessage(f"附近 {nearby} 架飞机", 3000)
 
     def _on_transponder_status_change(self, mode: str, code: str, ident: bool):
         ident_str = " IDENT" if ident else ""
@@ -524,6 +573,8 @@ class MainWindow(QMainWindow):
     def _save_settings(self):
         from core.resource_utils import get_config_path
         settings = self.connect_page.get_config()
+        # 安全策略：密码只在本次运行内使用，绝不写入磁盘（见 docs/adr/0003-credential-handling.md）
+        settings.pop("password", None)
         fp = self.workspace.flightplan_panel.get_flight_plan()
         settings.update({
             "aircraft": fp.get("aircraft", ""),
@@ -542,11 +593,31 @@ class MainWindow(QMainWindow):
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
 
+    async def _graceful_shutdown(self):
+        """在后台事件循环内执行的停机序列（供 closeEvent 同步等待）。"""
+        self._mock_enabled = False
+        if self._mock_server:
+            if self.dll_bridge.is_connected:
+                await self.dll_bridge.disconnect()
+            await self._mock_server.stop()
+            self._mock_server = None
+        if self.fsd_client:
+            await self.fsd_client.disconnect()
+            self.fsd_client = None
+            self.transponder.fsd_client = None
+        # 最后断开 DLL 遥测（停止接收循环，避免退出时 executor 已关闭的报错）
+        await self.dll_bridge.disconnect()
+
     def closeEvent(self, event):
         self._save_settings()
-        if self._mock_server:
-            self._stop_mock_server()
-        if self.fsd_client:
-            AsyncWorker.run_async(self.fsd_client.disconnect())
-        self._async_worker.stop()
+        worker = self._async_worker
+        loop = worker._loop
+        if loop and loop.is_running():
+            # 同步等待停机序列完成（上限 3 秒），确保后台任务先于事件循环退出
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._graceful_shutdown(), loop).result(timeout=3.0)
+            except Exception as e:
+                _diag(f"shutdown: graceful shutdown incomplete: {e}")
+        worker.stop()
         event.accept()

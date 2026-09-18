@@ -238,8 +238,6 @@ class DLLBridge:
 
         # 遥测连接（持久连接）
         self._telemetry_sock: Optional[socket.socket] = None
-        self._telemetry_reader: Optional[asyncio.StreamReader] = None
-        self._telemetry_writer: Optional[asyncio.StreamWriter] = None
         self._telemetry_task: Optional[asyncio.Task] = None
 
         # 最新遥测快照
@@ -251,7 +249,6 @@ class DLLBridge:
 
         # 连接状态
         self._telemetry_connected = False
-        self._command_connected = False   # 命令端口是短连接，这里只标记端口可达
         self._shutdown = False            # 断线重连维护循环的控制标志
         self._first_heading_logged = False  # 航向诊断只打印一次
 
@@ -266,11 +263,6 @@ class DLLBridge:
         return self._telemetry_connected
 
     @property
-    def is_command_connected(self) -> bool:
-        """命令端口始终返回 True（短连接，不维持长连接）。"""
-        return self._command_connected
-
-    @property
     def latest_telemetry(self) -> Optional[Telemetry]:
         return self._latest_telemetry
 
@@ -278,16 +270,16 @@ class DLLBridge:
 
     async def connect(self, retry: bool = True, retry_interval: float = 2.0) -> None:
         """
-        连接 DLL 的遥测端口并探测命令端口的可达性。
+        连接 DLL 的遥测端口。
 
-        :param retry: 若端口暂不可用，是否自动重试。
-        :param retry_interval: 重试间隔（秒）。
+        :param retry: 若端口暂不可用，是否自动重试（指数退避，封顶 30s）。
+        :param retry_interval: 首次重试间隔（秒）。
+
+        命令端口（12346）为短连接：send_command() 每次独立建连，
+        不在此处维护长连接或周期性探测（避免游戏未运行时空转）。
         """
         self._shutdown = False
-        await asyncio.gather(
-            self._connect_telemetry(retry, retry_interval),
-            self._probe_command_port(retry, retry_interval),
-        )
+        await self._connect_telemetry(retry, retry_interval)
 
     async def _connect_telemetry(self, retry: bool, interval: float) -> None:
         """连接遥测端口 12345 并维护接收循环（断线自动重连）。
@@ -298,6 +290,9 @@ class DLLBridge:
         连接建立并启动接收循环后，若 DLL 断开（EOF），会自动重连，
         直到 disconnect() 被调用（设置 _shutdown 标志）。这样无需手动
         开关 Mock DLL 即可在 AF4 重启 / DLL 重载后自动恢复遥测。
+
+        重试采用指数退避（interval * 2^n，封顶 30s）：游戏未运行时
+        不再每 2 秒空转一次连接尝试与日志告警。
         """
         retry_count = 0
         _diag(f"telemetry connect: starting (raw socket), target={self._host}:{self._telemetry_port}")
@@ -319,13 +314,16 @@ class DLLBridge:
                 if not retry:
                     raise
                 retry_count += 1
-                if retry_count <= 3 or retry_count % 10 == 0:
-                    _diag(f"telemetry connect: retry #{retry_count}, {self._host}:{self._telemetry_port} refused ({e})")
-                logger.warning(
-                    "遥测端口 %s:%d 暂不可用 (%s)，%.1fs 后重试",
-                    self._host, self._telemetry_port, e, interval,
-                )
-                await asyncio.sleep(interval)
+                delay = min(interval * (2 ** min(retry_count, 5)), 30.0)
+                # 前几次与之后每 20 次记录一条，避免日志被重试刷屏
+                if retry_count <= 3 or retry_count % 20 == 0:
+                    _diag(f"telemetry connect: retry #{retry_count}, "
+                          f"{self._host}:{self._telemetry_port} refused ({e})")
+                    logger.warning(
+                        "遥测端口 %s:%d 暂不可用 (%s)，%.1fs 后重试",
+                        self._host, self._telemetry_port, e, delay,
+                    )
+                await asyncio.sleep(delay)
                 continue
 
             # 等待接收循环结束（EOF 或 disconnect 取消）
@@ -373,7 +371,7 @@ class DLLBridge:
 
     async def disconnect(self) -> None:
         """断开所有连接。
-        
+
         注意：不直接 await _telemetry_task，因为该 task 可能阻塞在
         run_in_executor 的 sock.recv 上，跨协程 await 已取消的 task
         会触发 "attached to a different loop" 错误。
@@ -396,17 +394,7 @@ class DLLBridge:
         # 短暂等待让 task 自然退出
         await asyncio.sleep(0.3)
 
-        if self._telemetry_writer:
-            self._telemetry_writer.close()
-            try:
-                await self._telemetry_writer.wait_closed()
-            except Exception:
-                pass
-
         self._telemetry_connected = False
-        self._command_connected = False
-        self._telemetry_writer = None
-        self._telemetry_reader = None
         logger.info("DLL Bridge 已断开")
 
     # ── 遥测接收 ──────────────────────────────────────────────────
@@ -428,7 +416,7 @@ class DLLBridge:
 
         while True:
             try:
-                chunk = await loop.run_in_executor(None, sock.recv, 8192)
+                chunk = await loop.run_in_executor(None, sock.recv, 65536)
             except asyncio.CancelledError:
                 break
             except socket.timeout:

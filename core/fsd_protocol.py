@@ -128,3 +128,13 @@ def decimal_to_packed_coord(decimal_degrees: float, is_lon: bool = False) -> str
     if sign < 0:
         packed = f"-{packed}"
     return packed
+
+
+def distance_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """大圆距离（海里）。用于"附近飞机"等本地显示，精度要求不高。"""
+    lat1r, lat2r = math.radians(lat1), math.radians(lat2)
+    dlat = lat2r - lat1r
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(lat1r) * math.cos(lat2r) * math.sin(dlon / 2) ** 2)
+    return 2 * math.asin(min(1.0, math.sqrt(a))) * 3440.065

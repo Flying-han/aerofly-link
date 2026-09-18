@@ -13,7 +13,6 @@ a = Analysis(
     pathex=[str(project_root)],
     binaries=[],
     datas=[
-        (str(project_root / 'assets' / 'images'), 'assets/images'),
         (str(project_root / 'config' / 'settings.example.json'), 'config'),
     ],
     hiddenimports=[
@@ -32,11 +31,9 @@ a = Analysis(
         'core.fsd_client',
         'core.resource_utils',
         'core.mock_server',
-        'core.mock_dll_server',
         'core.diag_logger',
         'core.async_worker',
         'core.fsd_protocol',
-        'ui.connection_panel',
         'ui.connect_page',
         'ui.transponder_panel',
         'ui.flightplan_panel',

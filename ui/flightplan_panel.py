@@ -28,7 +28,6 @@ class FlightPlanPanel(QGroupBox):
     """飞行计划面板 —— 可滚动的表单 + 提交按钮"""
 
     flight_plan_submitted = pyqtSignal(dict)       # 用户点击提交
-    flight_plan_status = pyqtSignal(str, str)       # status, message
 
     def __init__(self, parent=None):
         super().__init__("飞行计划", parent)

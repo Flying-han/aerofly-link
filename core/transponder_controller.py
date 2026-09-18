@@ -43,6 +43,7 @@ SQUAWK_RADIO_FAIL = "7600"
 SQUAWK_HIJACK = "7500"
 
 # AFS4 返回的应答机模式中，哪些视为"关闭/待机"
+# （注：AeroflyBridge.dll 当前不暴露模式，此映射保留给未来 DLL 扩展使用）
 _AFS_MODE_STBY_SET = {"OFF", "SBY", "STBY"}
 # AFS4 返回的应答机模式中，哪些视为"高度报告"
 _AFS_MODE_ALT_SET = {"ON", "ALT", "TA", "TA/RA"}
@@ -379,8 +380,11 @@ class TransponderController:
         也可手动调用。
 
         检测内容：
-          1. 模式不一致：AFS4 显示 SBY 但客户端设为 ALT（或反之）
-          2. 代码不一致：AFS4 显示 7000 但客户端设为 1234
+          代码不一致：AFS4 显示 7000 但客户端设为 1234。
+
+        ⚠️ 不检测模式：AeroflyBridge.dll 不暴露应答机模式，
+        Telemetry.xpdr_mode 恒为占位值 "SBY"（见 dll_bridge.VAR_MAP 注释），
+        与虚拟模式比较必然产生假警告，故此处只比对代码。
 
         :return: SyncResult
         """
@@ -394,21 +398,11 @@ class TransponderController:
                 self._last_sync = result
                 return result
 
-            afs_mode_raw = afs_data.xpdr_mode or "UNKNOWN"
             afs_code = afs_data.xpdr_code or "----"
 
             warnings: list[str] = []
 
-            # 模式不一致检测
-            afs_mode_simplified = self._simplify_afs_mode(afs_mode_raw)
-            if afs_mode_simplified != self.virtual_mode.value:
-                warnings.append(
-                    f"⚠️ AFS4 应答机模式为 {afs_mode_raw}，"
-                    f"客户端设置为 {self.virtual_mode.value}，"
-                    f"请在 AFS4 内手动调整"
-                )
-
-            # 代码不一致检测
+            # 代码不一致检测（DLL 感知得到的唯一真实状态）
             if afs_code != self.squawk and afs_code != "----":
                 warnings.append(
                     f"⚠️ AFS4 应答机代码为 {afs_code}，"
@@ -418,7 +412,7 @@ class TransponderController:
             result = SyncResult(
                 synced=len(warnings) == 0,
                 warnings=warnings,
-                afs_mode=afs_mode_raw,
+                afs_mode="UNKNOWN",  # DLL 不暴露模式，恒为未知
                 afs_code=afs_code,
             )
             self._last_sync = result
@@ -535,23 +529,6 @@ class TransponderController:
         if not isinstance(code, str) or len(code) != 4:
             return False
         return all(c in "01234567" for c in code)
-
-    @staticmethod
-    def _simplify_afs_mode(afs_mode: str) -> str:
-        """
-        将 AFS4 返回的应答机模式简化为 VATSIM 两种状态。
-
-        AFS4 可能返回 OFF/SBY/ON/ALT/TA/TA-RA 等，
-        简化为 "STBY"（关闭/待机）或 "ALT"（报告）。
-
-        :param afs_mode: AFS4 原始模式字符串
-        :return: "STBY" 或 "ALT"
-        """
-        mode_upper = (afs_mode or "").upper()
-        if mode_upper in _AFS_MODE_STBY_SET:
-            return "STBY"
-        # ON/ALT/TA/TA-RA 等均视为高度报告
-        return "ALT"
 
     def _notify_state_change(self) -> None:
         """通知 UI 应答机状态已变化。"""
