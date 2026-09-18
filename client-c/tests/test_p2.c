@@ -188,7 +188,7 @@ static void pump(bridge_t *b, mocksrv_t *m, int ms)
         fd_set r;
         FD_ZERO(&r);
         mocksrv_collect_fds(m, &r, NULL);
-        br_collect_fds(b, &r, NULL);
+        br_collect_fds(b, &r, NULL, NULL);
         struct timeval tv = { 0, 10000 };
         select(0, &r, NULL, NULL, &tv);
         mocksrv_on_readable(m, &r);

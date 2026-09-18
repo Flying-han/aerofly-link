@@ -307,7 +307,7 @@ void app_poll(app_t *a, int timeout_ms)
     FD_ZERO(&r);
     FD_ZERO(&w);
     sess_collect_fds(&a->sess, &r, &w, NULL);
-    br_collect_fds(&a->bridge, &r, NULL);
+    br_collect_fds(&a->bridge, &r, &w, NULL);
     mocksrv_collect_fds(&a->mock, &r, NULL);
 
     struct timeval tv = { timeout_ms / 1000, (timeout_ms % 1000) * 1000 };
@@ -319,9 +319,12 @@ void app_poll(app_t *a, int timeout_ms)
         if (FD_ISSET(a->sess.sock, &r))
             sess_on_readable(&a->sess);
     }
-    if (a->bridge.tel_sock != INVALID_SOCKET
-        && FD_ISSET(a->bridge.tel_sock, &r))
-        br_on_readable(&a->bridge);
+    if (a->bridge.tel_sock != INVALID_SOCKET) {
+        if (FD_ISSET(a->bridge.tel_sock, &w))
+            br_on_writable(&a->bridge);
+        if (FD_ISSET(a->bridge.tel_sock, &r) && a->bridge.tel_connected)
+            br_on_readable(&a->bridge);
+    }
     mocksrv_on_readable(&a->mock, &r);
 
     now = net_now();
@@ -361,12 +364,12 @@ void app_status_text(const app_t *a, char *conn, size_t conn_cap,
     if (dll) {
         if (a->mock_on)
             _snprintf(dll, dll_cap - 1, "Mock: %s",
-                      a->bridge.tel_connected ? "● 已连接" : "○ 启动中...");
+                      a->bridge.tel_connected ? "● 已连" : "○ 启动");
         else if (a->bridge.tel_connected)
-            _snprintf(dll, dll_cap - 1, "DLL: ● 已连接%s",
-                      a->bridge.has_telem ? "" : "（无数据）");
+            _snprintf(dll, dll_cap - 1, "DLL: ● %s",
+                      a->bridge.has_telem ? "已连" : "无数据");
         else
-            _snprintf(dll, dll_cap - 1, "DLL: ○ 等待游戏");
+            _snprintf(dll, dll_cap - 1, "DLL: ○ 等待");
     }
 }
 

@@ -120,6 +120,7 @@ void br_stop(bridge_t *b)
 static void telemetry_up(bridge_t *b, SOCKET s)
 {
     b->tel_sock = s;
+    b->tel_connecting = false;
     fsd_linebuf_init(&b->lb);
     b->fails = 0;
     set_connected(b, true);
@@ -127,6 +128,7 @@ static void telemetry_up(bridge_t *b, SOCKET s)
 
 static void telemetry_down(bridge_t *b)
 {
+    b->tel_connecting = false;
     if (b->tel_sock != INVALID_SOCKET) {
         closesocket(b->tel_sock);
         b->tel_sock = INVALID_SOCKET;
@@ -143,6 +145,16 @@ static void telemetry_down(bridge_t *b)
     }
 }
 
+void br_on_writable(bridge_t *b)
+{
+    if (!b->tel_connecting)
+        return;
+    if (net_connect_finished(b->tel_sock) == 0)
+        telemetry_up(b, b->tel_sock);
+    else
+        telemetry_down(b);
+}
+
 void br_tick(bridge_t *b, double now)
 {
     if (!b->want_connected || b->tel_sock != INVALID_SOCKET)
@@ -153,13 +165,12 @@ void br_tick(bridge_t *b, double now)
     SOCKET s = INVALID_SOCKET;
     int rc = net_nb_connect(HOST, TEL_PORT, &s);
     if (rc == 0) {
-        telemetry_up(b, s);
+        telemetry_up(b, s);          /* 本机回环常见：立即建立 */
     } else if (rc == 1) {
-        b->tel_sock = s;   /* 连接进行中，等 on_writable/tick 完成 */
-        if (net_wait_writable(s, 4000) > 0 && net_connect_finished(s) == 0)
-            telemetry_up(b, s);
-        else
-            telemetry_down(b);
+        /* 非阻塞进行中：完成事件走 select 的 w 集（br_on_writable），
+         * 绝不在 UI 线程内联等待（架构 §4 线程模型约束） */
+        b->tel_sock = s;
+        b->tel_connecting = true;
     } else {
         b->fails++;
         double delay = RETRY_BASE;
@@ -205,10 +216,14 @@ void br_on_readable(bridge_t *b)
     }
 }
 
-void br_collect_fds(const bridge_t *b, fd_set *r, int *max)
+void br_collect_fds(const bridge_t *b, fd_set *r, fd_set *w, int *max)
 {
     (void)max;
-    if (b->tel_sock != INVALID_SOCKET && b->tel_connected)
+    if (b->tel_sock == INVALID_SOCKET)
+        return;
+    if (b->tel_connecting)
+        FD_SET(b->tel_sock, w);
+    else
         FD_SET(b->tel_sock, r);
 }
 

@@ -340,6 +340,7 @@ void sess_on_readable(sess_t *s)
 
     char chunk[8192];
     int got_lines = 0;
+
     for (;;) {
         int n = recv(s->sock, chunk, sizeof(chunk), 0);
         if (n == 0) {

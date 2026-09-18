@@ -18,7 +18,7 @@ if errorlevel 1 (
 )
 
 set "CFLAGS=-std=c11 -Wall -Wextra -Wshadow -O2 -Iinclude -DWIN32_LEAN_AND_MEAN -DNOMINMAX"
-set "LIBS=-lws2_32"
+set "LIBS=-lws2_32 -ldwmapi -luxtheme -lgdi32 -lcomctl32 -lcomdlg32"
 set "BUILD=build"
 if not exist "%BUILD%" mkdir "%BUILD%"
 
@@ -50,7 +50,8 @@ zig cc %BUILD%/cli_main.obj %BUILD%/libfsd.a %LIBS% -o %BUILD%/aeroflylink-cli.e
 
 echo [5/6] building GUI client...
 zig cc %CFLAGS% -c src/gui.c             -o %BUILD%/gui.obj             || exit /b 1
-zig cc %BUILD%/gui.obj %BUILD%/libfsd.a %LIBS% -lgdi32 -lcomctl32 -lcomdlg32 -mwindows -o %BUILD%/aeroflylink.exe || exit /b 1
+zig cc %BUILD%/gui.obj %BUILD%/libfsd.a %LIBS% -mwindows -o %BUILD%/aeroflylink.exe || exit /b 1
+copy /y aeroflylink.exe.manifest %BUILD%\aeroflylink.exe.manifest >nul
 
 echo [6/6] running tests...
 %BUILD%\test_protocol.exe || exit /b 1

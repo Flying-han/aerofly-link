@@ -40,6 +40,7 @@ typedef struct {
     double   next_retry;      /* 0 = 立即可试 */
     int      fails;
     bool     want_connected;  /* stop 后不再重连 */
+    bool     tel_connecting;  /* 非阻塞 connect 进行中 */
 
     /* 最新遥测 */
     telem_t  last;
@@ -58,8 +59,9 @@ void br_start(bridge_t *b);
 void br_stop(bridge_t *b);
 
 void br_on_readable(bridge_t *b);
+void br_on_writable(bridge_t *b);
 void br_tick(bridge_t *b, double now);
-void br_collect_fds(const bridge_t *b, fd_set *r, int *max);
+void br_collect_fds(const bridge_t *b, fd_set *r, fd_set *w, int *max);
 
 /* 命令端口短连接。num_val 与 str_val 二选一（另一个传 false/NULL）。
  * 返回 0 成功（resp 为服务器响应行，可为 NULL），-1 失败。
