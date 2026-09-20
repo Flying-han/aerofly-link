@@ -206,12 +206,14 @@ static void handshake_line(sess_t *s, const char *line)
 
 /* ── 数据接收 ── */
 
-static void traffic_upsert(sess_t *s, const fsd_pilot_position *p)
+static void traffic_upsert_full(sess_t *s, const char *cs, double lat,
+                                double lon, int alt_ft, int gs_kts,
+                                float heading_deg, bool on_ground)
 {
     size_t slot = s->n_traffic;
     for (size_t i = 0; i < s->n_traffic; i++) {
         if (s->traffic[i].used
-            && strcmp(s->traffic[i].callsign, p->callsign) == 0) {
+            && strcmp(s->traffic[i].callsign, cs) == 0) {
             slot = i;
             break;
         }
@@ -220,14 +222,14 @@ static void traffic_upsert(sess_t *s, const fsd_pilot_position *p)
         slot = 0;   /* 表满：覆盖最旧（数组头） */
 
     sess_traffic_t *t = &s->traffic[slot];
-    strncpy(t->callsign, p->callsign, sizeof(t->callsign) - 1);
+    strncpy(t->callsign, cs, sizeof(t->callsign) - 1);
     t->callsign[sizeof(t->callsign) - 1] = '\0';
-    t->lat = p->lat;
-    t->lon = p->lon;
-    t->alt_ft = p->alt_ft;
-    t->gs_kts = p->gs_kts;
-    t->heading_deg = p->heading_deg;
-    t->on_ground = p->on_ground;
+    t->lat = lat;
+    t->lon = lon;
+    t->alt_ft = alt_ft;
+    t->gs_kts = gs_kts;
+    t->heading_deg = heading_deg;
+    t->on_ground = on_ground;
     t->used = true;
     if (slot == s->n_traffic && s->n_traffic < SESS_MAX_TRAFFIC)
         s->n_traffic++;
@@ -301,7 +303,22 @@ static void online_line(sess_t *s, const char *line)
             break;
         if (is_own_callsign(s, p.callsign))
             break;   /* 服务器回传自身 */
-        traffic_upsert(s, &p);
+        traffic_upsert_full(s, p.callsign, p.lat, p.lon, p.alt_ft,
+                            p.gs_kts, p.heading_deg, p.on_ground);
+        if (s->on_traffic)
+            s->on_traffic(s->ud, s->traffic, s->n_traffic);
+        break;
+    }
+    case FSD_MSG_ATC_POS: {
+        /* #AP：呼号/机型/高度（无坐标——app_nearby_count 的 haversine
+         * 天然跳过零坐标项，Python 同语义） */
+        fsd_atc_pos ap;
+        if (fsd_parse_atc_pos(line, &ap) != 0)
+            break;
+        if (is_own_callsign(s, ap.callsign))
+            break;   /* 服务器回传自身 */
+        traffic_upsert_full(s, ap.callsign, 0.0, 0.0,
+                            ap.has_alt ? ap.alt_ft : 0, 0, 0.0f, false);
         if (s->on_traffic)
             s->on_traffic(s->ud, s->traffic, s->n_traffic);
         break;

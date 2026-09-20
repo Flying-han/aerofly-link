@@ -180,6 +180,47 @@ int fsd_parse_tm(const char *line, fsd_tm_fields *out)
     return 0;
 }
 
+int fsd_parse_atc_pos(const char *line, fsd_atc_pos *out)
+{
+    if (!line || !out || strncmp(line, "#AP", 3) != 0)
+        return -2;
+
+    out->callsign[0] = out->type[0] = '\0';
+    out->alt_ft = 0;
+    out->has_alt = false;
+
+    const char *body = line + 3;
+    const char *c1 = strchr(body, ':');
+    if (!c1)
+        return -2;                       /* 无字段区（Python 无 ':' 即跳过） */
+    if (copy_bounded(out->callsign, sizeof(out->callsign), body,
+                     (size_t)(c1 - body)) != 0)
+        return -2;
+
+    const char *rest = c1 + 1;
+    const char *c2 = strchr(rest, ':');
+    size_t type_len = c2 ? (size_t)(c2 - rest) : strlen(rest);
+    if (copy_bounded(out->type, sizeof(out->type), rest, type_len) != 0)
+        return -2;
+
+    if (c2) {
+        const char *c3 = strchr(c2 + 1, ':');
+        size_t alt_len = c3 ? (size_t)(c3 - (c2 + 1)) : strlen(c2 + 1);
+        if (alt_len > 0 && alt_len < 12) {
+            char alt[12];
+            memcpy(alt, c2 + 1, alt_len);
+            alt[alt_len] = '\0';
+            char *end = NULL;
+            long v = strtol(alt, &end, 10);
+            if (end && *end == '\0' && end != alt) {
+                out->alt_ft = (int)v;
+                out->has_alt = true;
+            }
+        }
+    }
+    return 0;
+}
+
 int fsd_parse_position(const char *line, fsd_pilot_position *out)
 {
     if (!line || !out)

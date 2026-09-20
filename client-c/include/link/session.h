@@ -12,6 +12,8 @@
  * 与 Python 的差异（有意为之）：
  *   - 不自动重连 FSD（与 Python 一致；DLL 桥接才有自动重连）
  *   - traffic 表定长（MAX_TRAFFIC=64），超出丢弃最旧
+ *   - on_traffic 每包触发、不做 Python 的 1/s 节流（当前 UI 仅定时
+ *     取 nearby 数，无逐帧消费方）
  */
 #ifndef LINK_SESSION_H
 #define LINK_SESSION_H

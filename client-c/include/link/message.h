@@ -120,4 +120,17 @@ typedef struct {
 
 int fsd_parse_position(const char *line, fsd_pilot_position *out);
 
+/* ── 解析：#AP 客户端位置报告 ──
+ * "#AP<callsign>:<type>[:<alt_ft>...]"——仅提取呼号/机型/高度
+ *（无坐标，Python _handle_ap_traffic 同语义）。缺 ':' 或截断安全失败。
+ */
+typedef struct {
+    char callsign[16];
+    char type[8];
+    int  alt_ft;
+    bool has_alt;
+} fsd_atc_pos;
+
+int fsd_parse_atc_pos(const char *line, fsd_atc_pos *out);
+
 #endif /* LINK_FSD_MESSAGE_H */

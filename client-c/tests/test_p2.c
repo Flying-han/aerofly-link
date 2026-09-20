@@ -164,6 +164,21 @@ static void test_session_handshake(void)
               && strcmp(s.traffic[1].callsign, "TST1234") == 0);
     }
 
+    /* G2 #AP 进 traffic 表：无坐标、有高度；自机过滤；无 ':' 安全忽略 */
+    {
+        const char *bulk =
+            "#APZZZ_TWR:B738:35000\r\n"
+            "#APTST123:B738:35000\r\n"
+            "#APNOCOLON\r\n";
+        send(cli, bulk, (int)strlen(bulk), 0);
+        net_wait_readable(s.sock, 1000);
+        sess_on_readable(&s);
+        CHECK(s.n_traffic == 3
+              && strcmp(s.traffic[2].callsign, "ZZZ_TWR") == 0);
+        CHECK(s.traffic[2].alt_ft == 35000);
+        CHECK(s.traffic[2].lat == 0.0 && s.traffic[2].lon == 0.0);
+    }
+
     /* 文本消息 */
     CHECK(sess_send_tm(&s, "ZGGG_TWR", "请求放行") == 0);
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);

@@ -261,6 +261,24 @@ static void test_parsers(void)
     /* 字段不足安全失败 */
     CHECK(fsd_parse_position("@N:ANA19:7000:2:31.1:121.8:0:0:0", &ac) == -2);
     CHECK(fsd_parse_position("no position here", &ac) == -2);
+
+    /* #AP：呼号/机型/高度提取（Python _handle_ap_traffic 对齐） */
+    {
+        fsd_atc_pos ap;
+        CHECK(fsd_parse_atc_pos("#APZZZ_TWR:B738:35000", &ap) == 0);
+        CHECK_STR(ap.callsign, "ZZZ_TWR");
+        CHECK_STR(ap.type, "B738");
+        CHECK(ap.has_alt && ap.alt_ft == 35000);
+
+        CHECK(fsd_parse_atc_pos("#APZZZ_TWR:B738", &ap) == 0);
+        CHECK(ap.has_alt == false && ap.alt_ft == 0);
+
+        CHECK(fsd_parse_atc_pos("#APZZZ_TWR:B738:abc", &ap) == 0);
+        CHECK(ap.has_alt == false);
+
+        CHECK(fsd_parse_atc_pos("#APNOCOLON", &ap) == -2);
+        CHECK(fsd_parse_atc_pos("@N:X", &ap) == -2);
+    }
 }
 
 /* ── 行组帧 ── */
