@@ -7,6 +7,7 @@
 
 #include <commctrl.h>
 #include <windowsx.h>
+#include <richedit.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -69,15 +70,28 @@ void build_conn_page(HWND wnd)
     ComboBox_SetCurSel(G.cb_type, 1);
     y += SC(68);
 
-    /* 服务器 */
+    /* 服务器（combo 缩窄，右侧 +/− 管理记录） */
     wchar_t srv_l[16]; u16("SERVER", srv_l, 16);
     G.page_conn[G.n_conn++] = mk_label(wnd, srv_l, x, y, w);
+    int srv_w = w - SC(116);
     G.cb_server = CreateWindowExW(0, L"COMBOBOX", L"",
                                   WS_CHILD | WS_VISIBLE | CBS_DROPDOWN,
-                                  x, y + SC(22), w, SC(200), wnd,
+                                  x, y + SC(22), srv_w, SC(200), wnd,
                                   (HMENU)(INT_PTR)IDC_SERVER, NULL, NULL);
     SendMessageW(G.cb_server, WM_SETFONT, (WPARAM)G.f_body, TRUE);
     G.page_conn[G.n_conn++] = G.cb_server;
+    const wchar_t *srv_btn[2] = { L"+", L"-" };
+    const int srv_ids[2] = { IDC_SRV_ADD, IDC_SRV_DEL };
+    for (int i = 0; i < 2; i++) {
+        G.page_conn[G.n_conn++] = CreateWindowExW(
+            0, L"BUTTON", srv_btn[i],
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            x + srv_w + SC(6) + i * SC(56), y + SC(22), SC(50), SC(34), wnd,
+            (HMENU)(INT_PTR)srv_ids[i], NULL, NULL);
+        SendMessageW(G.page_conn[G.n_conn - 1], WM_SETFONT,
+                     (WPARAM)G.f_body, TRUE);
+        reg_btn(G.page_conn[G.n_conn - 1]);
+    }
     y += SC(68);
 
     /* 主操作：胶囊实心 */
@@ -229,14 +243,14 @@ void build_ws_page(HWND wnd)
     SendMessageW(G.lbl_fp_status, WM_SETFONT, (WPARAM)G.f_small, TRUE);
     y += SC(286);
 
-    /* ── 卡片：ATC MESSAGES ── */
+    /* ── 卡片：ATC MESSAGES（owner-draw ListBox：时间戳/按类着色）── */
     G.rc_card_log = (RECT){ x, y, x + w, y + SC(212) };
-    G.ed_log = CreateWindowExW(0, L"EDIT", L"",
-                               WS_CHILD | WS_VISIBLE | ES_MULTILINE |
-                               ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL,
-                               x + SC(16), y + SC(40), w - SC(32), SC(110), wnd,
-                               (HMENU)(INT_PTR)IDC_LOG, NULL, NULL);
-    SendMessageW(G.ed_log, WM_SETFONT, (WPARAM)G.f_log, TRUE);
+    G.ed_log = CreateWindowExW(
+        0, L"LISTBOX", L"",
+        WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_OWNERDRAWFIXED |
+            LBS_NOINTEGRALHEIGHT | LBS_DISABLENOSCROLL,
+        x + SC(16), y + SC(40), w - SC(32), SC(110), wnd,
+        (HMENU)(INT_PTR)IDC_LOG, NULL, NULL);
     G.ed_msg = CreateWindowExW(0, L"EDIT", L"",
                                WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
                                x + SC(16), y + SC(162), w - SC(32) - SC(90),
@@ -283,6 +297,8 @@ void sync_pages(void)
     if (now != G.page_shown) {
         G.page_shown = now;
         set_connected_ui(now);
+        if (!now)
+            reset_fp_fields();   /* 断开重置（Python main_window reset_fields） */
     }
 }
 
@@ -324,7 +340,8 @@ void ui_from_cfg(void)
     ComboBox_SetCurSel(G.cb_eco, eco_sel);
 }
 
-void cfg_from_ui(void)
+/* 连接字段 UI → cfg（退出保存路径只调此，避免覆盖已重置的 FP 字段） */
+void cfg_from_ui_conn(void)
 {
     cfg_t *c = &G.app.cfg;
     wchar_t w[256];
@@ -341,6 +358,7 @@ void cfg_from_ui(void)
     GETTEXT(G.ed_realname, c->realname, sizeof(c->realname));
     GETTEXT(G.ed_model, c->model, sizeof(c->model));
     GETTEXT(G.cb_server, s, 256);
+#undef GETTEXT
     {
         char host[128] = "";
         int port = 6809;
@@ -350,6 +368,27 @@ void cfg_from_ui(void)
             c->port = port;
         }
     }
+
+    for (size_t i = 0; i < c->nservers; i++)
+        if (strcmp(c->servers[i], s) == 0)
+            return;
+    if (c->nservers < CFG_MAX_SERVERS && s[0]) {
+        strncpy(c->servers[c->nservers], s, JSN_STR_CAP - 1);
+        c->nservers++;
+    }
+}
+
+/* 飞行计划字段 UI → cfg（连接/提交时保存；起飞时间等临时字段不落盘） */
+void cfg_from_ui_fp(void)
+{
+    cfg_t *c = &G.app.cfg;
+    wchar_t w[256];
+    char s[256];
+
+#define GETTEXT(hwnd, dst, cap) do { \
+    GetWindowTextW(hwnd, w, 256); u8(w, s, 256); \
+    strncpy(dst, s, (cap) - 1); dst[(cap) - 1] = '\0'; } while (0)
+
     GETTEXT(G.ed_ac, c->fp_aircraft, sizeof(c->fp_aircraft));
     GETTEXT(G.ed_tas, c->fp_tas, sizeof(c->fp_tas));
     GETTEXT(G.ed_dep, c->fp_dep, sizeof(c->fp_dep));
@@ -370,14 +409,21 @@ void cfg_from_ui(void)
                 wk = i;
         strncpy(c->fp_wake, wake_names[wk], sizeof(c->fp_wake) - 1);
     }
+}
 
-    for (size_t i = 0; i < c->nservers; i++)
-        if (strcmp(c->servers[i], s) == 0)
-            return;
-    if (c->nservers < CFG_MAX_SERVERS && s[0]) {
-        strncpy(c->servers[c->nservers], s, JSN_STR_CAP - 1);
-        c->nservers++;
-    }
+/* 断开重置 FP 面板（基准 Python flightplan_panel.reset_fields） */
+void reset_fp_fields(void)
+{
+    SetWindowTextW(G.ed_ac, L"");
+    SetWindowTextW(G.ed_tas, L"");
+    SetWindowTextW(G.ed_dep, L"");
+    SetWindowTextW(G.ed_dest, L"");
+    SetWindowTextW(G.ed_altn, L"");
+    SetWindowTextW(G.ed_cruise, L"");
+    SetWindowTextW(G.ed_route, L"");
+    SetWindowTextW(G.ed_remarks, L"");
+    ComboBox_SetCurSel(G.cb_wake, 1);   /* Medium */
+    SetWindowTextW(G.lbl_fp_status, L"请先连接到服务器");
 }
 
 void apply_eco_type(void)
@@ -405,7 +451,8 @@ void apply_eco_type(void)
 /* ── 动作 ── */
 void do_connect(HWND wnd)
 {
-    cfg_from_ui();
+    cfg_from_ui_conn();
+    cfg_from_ui_fp();
     if (!G.app.cfg.callsign[0] || !G.app.cfg.cid[0]) {
         MessageBoxW(wnd, L"请填写呼号和 CID", L"配置不完整", MB_ICONWARNING);
         return;
@@ -435,7 +482,7 @@ void do_connect(HWND wnd)
 
 void do_submit_fp(HWND wnd)
 {
-    cfg_from_ui();
+    cfg_from_ui_fp();
     cfg_t *c = &G.app.cfg;
 #define FPCOPY(field, key) do { \
     strncpy(G.app.field, c->key, sizeof(G.app.field) - 1); \

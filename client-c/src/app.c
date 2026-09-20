@@ -12,7 +12,7 @@
 #define SYNC_INTERVAL   5.0
 #define IDENT_DURATION  5.0
 
-static void app_log(app_t *a, const char *fmt, ...)
+static void app_logk(app_t *a, app_log_kind_t kind, const char *fmt, ...)
 {
     if (!a->on_log)
         return;
@@ -22,7 +22,19 @@ static void app_log(app_t *a, const char *fmt, ...)
     _vsnprintf(line, sizeof(line) - 1, fmt, ap);
     line[sizeof(line) - 1] = '\0';
     va_end(ap);
-    a->on_log(a->ud, line);
+    a->on_log(a->ud, kind, line);
+}
+
+/* 系统行简写（绝大多数日志为 SYS 类） */
+static void app_log(app_t *a, const char *fmt, ...)
+{
+    va_list ap;
+    char line[APP_LOG_MAX];
+    va_start(ap, fmt);
+    _vsnprintf(line, sizeof(line) - 1, fmt, ap);
+    line[sizeof(line) - 1] = '\0';
+    va_end(ap);
+    app_logk(a, APP_LOG_SYS, "%s", line);
 }
 
 /* ── 回调桥：各模块 → app → UI ── */
@@ -44,7 +56,7 @@ static void sess_status_cb(void *ud, sess_state_t st, const char *msg)
 static void sess_tm_cb(void *ud, const char *from, const char *to, const char *text)
 {
     app_t *a = (app_t *)ud;
-    app_log(a, "%s → %s: %s", from, to, text);
+    app_logk(a, APP_LOG_IN, "%s → %s: %s", from, to, text);
 }
 
 static void sess_debug_cb(void *ud, const char *line)
@@ -190,7 +202,7 @@ int app_send_chat(app_t *a, const char *text)
 
     int rc = sess_send_tm(&a->sess, dest, msg);
     if (rc == 0)
-        app_log(a, "我 → %s: %s", dest, msg);
+        app_logk(a, APP_LOG_OUT, "我 → %s: %s", dest, msg);
     else
         app_log(a, "[系统] 未连接到服务器，无法发送消息");
     return rc;

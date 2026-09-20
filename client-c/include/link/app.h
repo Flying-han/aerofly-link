@@ -21,10 +21,17 @@
 
 #define APP_LOG_MAX 512
 
+/* 日志类别（GUI 按类着色，基准 Python log_panel kind：system/in/out） */
+typedef enum {
+    APP_LOG_SYS = 0,    /* 系统/诊断行 */
+    APP_LOG_IN,         /* 收到的文本（来源着色） */
+    APP_LOG_OUT         /* 发送的文本 */
+} app_log_kind_t;
+
 typedef struct {
     /* 输出回调（均可 NULL） */
     void *ud;
-    void (*on_log)(void *ud, const char *line);                 /* 通讯/系统日志 */
+    void (*on_log)(void *ud, app_log_kind_t kind, const char *line); /* 通讯/系统日志 */
     void (*on_debug)(void *ud, const char *line);               /* 协议原始行跟踪 */
     void (*on_status)(void *ud, const char *line);              /* 连接状态行 */
     void (*on_xpdr)(void *ud);                                  /* 应答机状态变化 */

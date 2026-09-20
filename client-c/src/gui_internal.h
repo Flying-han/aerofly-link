@@ -38,7 +38,9 @@ enum {
     IDC_FP_ALTN, IDC_FP_CRUISE, IDC_FP_ROUTE, IDC_FP_REMARKS,
     IDC_FP_SUBMIT, IDC_FP_STATUS,
     IDC_LOG, IDC_MSG, IDC_SEND,
-    IDC_SB_CONN = 300, IDC_SB_XPDR, IDC_SB_FLIGHT, IDC_SB_DLL, IDC_MOCK
+    IDC_SRV_ADD, IDC_SRV_DEL,
+    IDC_SB_CONN = 300, IDC_SB_XPDR, IDC_SB_FLIGHT, IDC_SB_CS, IDC_SB_DLL,
+    IDC_MOCK
 };
 
 #define TIMER_APP 1
@@ -47,7 +49,7 @@ enum {
 #define IDENT_SECS     5.0
 
 /* 主窗口客户区逻辑尺寸（SC() 按 DPI 缩放） */
-#define WIN_W 600
+#define WIN_W 640
 #define WIN_H 800
 
 typedef struct { HWND h; bool hover; WNDPROC old; } obtn_t;
@@ -81,7 +83,7 @@ typedef struct {
     HWND    ed_ac, cb_wake, ed_tas, ed_dep, ed_dest, ed_altn, ed_cruise;
     HWND    ed_route, ed_remarks, btn_fp, lbl_fp_status;
     HWND    ed_log, ed_msg, btn_send;
-    HWND    sb_conn, sb_xpdr, sb_flight, sb_dll, btn_mock;
+    HWND    sb_conn, sb_xpdr, sb_flight, sb_callsign, sb_dll, btn_mock;
     /* 卡片矩形（父窗口绘制） */
     RECT    rc_card_xp, rc_card_fp, rc_card_log;
     char    password[64];
@@ -94,6 +96,7 @@ int SC(int v);
 int u16(const char *s, wchar_t *w, int wcap);
 int u8(const wchar_t *w, char *s, int cap);
 void log_append(const char *line);
+void log_msg(app_log_kind_t kind, const char *line);
 HFONT mkfont(int h_px, int weight, const wchar_t *face);
 HWND mk(HWND parent, const wchar_t *cls, const wchar_t *text,
         DWORD style, int x, int y, int w, int h, int id);
@@ -106,7 +109,9 @@ void build_conn_page(HWND wnd);
 void build_ws_page(HWND wnd);
 void sync_pages(void);
 void ui_from_cfg(void);
-void cfg_from_ui(void);
+void cfg_from_ui_conn(void);   /* 连接字段（退出保存路径只调此） */
+void cfg_from_ui_fp(void);     /* 飞行计划字段（连接/提交时保存） */
+void reset_fp_fields(void);    /* 断开重置（对齐 Python reset_fields） */
 void apply_eco_type(void);
 void do_connect(HWND wnd);
 void do_submit_fp(HWND wnd);

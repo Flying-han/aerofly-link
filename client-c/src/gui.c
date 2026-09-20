@@ -40,27 +40,73 @@ int u8(const wchar_t *w, char *s, int cap)
     return WideCharToMultiByte(CP_UTF8, 0, w, -1, s, cap, NULL, NULL);
 }
 
-/* ── 日志追加（超长截半，ADR 0005 内存上限）── */
+/* ── 日志（owner-draw ListBox：时间戳 + 按类着色；上限 400 行，ADR 0005）── */
+#define LOG_MAX_LINES 400
+#define LOG_TEXT_CAP  512
+typedef struct {
+    app_log_kind_t kind;
+    wchar_t text[LOG_TEXT_CAP];
+} log_item_t;
+static log_item_t log_items[LOG_MAX_LINES];
+static size_t log_head, log_count;   /* 环形：head=最旧下标 */
+
 void log_append(const char *line)
 {
-    wchar_t wline[600];
-    u16(line, wline, 600);
-    int len = GetWindowTextLengthW(G.ed_log);
-    if (len > 48000) {
-        SendMessageW(G.ed_log, EM_SETSEL, 0, len / 2);
-        SendMessageW(G.ed_log, EM_REPLACESEL, FALSE, (LPARAM)L"");
+    log_msg(APP_LOG_SYS, line);
+}
+
+/* 日志行：暗色 [HH:MM:SS] 前缀 + 按类着色（基准 Python log_panel.add_message）：
+ * SYS 暗；IN 绿（收到的文本）；OUT 亮（发送的文本） */
+void log_msg(app_log_kind_t kind, const char *line)
+{
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    log_item_t *it = &log_items[(log_head + log_count) % LOG_MAX_LINES];
+    it->kind = kind;
+    _snwprintf(it->text, LOG_TEXT_CAP - 1, L"[%02d:%02d:%02d] %.*s",
+               st.wHour, st.wMinute, st.wSecond, 460, line ? line : "");
+    it->text[LOG_TEXT_CAP - 1] = 0;
+
+    if (log_count == LOG_MAX_LINES) {
+        log_head = (log_head + 1) % LOG_MAX_LINES;   /* 满则丢最旧 */
+        SendMessageW(G.ed_log, LB_DELETESTRING, 0, 0);
+    } else {
+        log_count++;
     }
-    int end = GetWindowTextLengthW(G.ed_log);
-    SendMessageW(G.ed_log, EM_SETSEL, end, end);
-    wchar_t with_nl[640];
-    _snwprintf(with_nl, 639, L"%s\r\n", wline);
-    with_nl[639] = 0;
-    SendMessageW(G.ed_log, EM_REPLACESEL, FALSE, (LPARAM)with_nl);
-    SendMessageW(G.ed_log, EM_SCROLLCARET, 0, 0);
+    size_t ring = (log_head + log_count - 1) % LOG_MAX_LINES;
+    int idx = SendMessageW(G.ed_log, LB_ADDSTRING, 0, 0);
+    SendMessageW(G.ed_log, LB_SETITEMDATA, idx, (LPARAM)ring);
+    SendMessageW(G.ed_log, LB_SETTOPINDEX, idx, 0);
+}
+
+/* owner-draw：单条日志渲染 */
+static void draw_log_item(const DRAWITEMSTRUCT *d)
+{
+    HDC dc = d->hDC;
+    RECT rc = d->rcItem;
+    FillRect(dc, &rc, G.br_logbg);
+    size_t i = (size_t)d->itemData;
+    if (i >= LOG_MAX_LINES || !log_items[i].text[0])
+        return;
+    COLORREF c = (log_items[i].kind == APP_LOG_IN)    ? C_GREEN
+               : (log_items[i].kind == APP_LOG_OUT)   ? C_TEXT
+                                                      : C_DIM;
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, c);
+    HFONT old = SelectObject(dc, G.f_log);
+    RECT pad = { rc.left + SC(8), rc.top, rc.right - SC(8), rc.bottom };
+    DrawTextW(dc, log_items[i].text, -1, &pad,
+              DT_LEFT | DT_NOPREFIX | DT_END_ELLIPSIS | DT_SINGLELINE
+                  | DT_VCENTER);
+    SelectObject(dc, old);
 }
 
 /* ── app 回调 ── */
-static void cb_log(void *ud, const char *line) { (void)ud; log_append(line); }
+static void cb_log(void *ud, app_log_kind_t kind, const char *line)
+{
+    (void)ud;
+    log_msg(kind, line);
+}
 
 static void cb_debug(void *ud, const char *line)
 {
@@ -68,7 +114,7 @@ static void cb_debug(void *ud, const char *line)
     char tagged[600];
     _snprintf(tagged, sizeof(tagged) - 1, "[trace] %s", line);
     tagged[sizeof(tagged) - 1] = '\0';
-    log_append(tagged);
+    log_msg(APP_LOG_SYS, tagged);
 }
 
 static void cb_status(void *ud, const char *line)
@@ -374,6 +420,8 @@ static LRESULT on_ctlcolor_static(HWND ctrl, HDC dc)
         bg = G.br_card;
     } else if (id == IDC_CONNECT_STATUS) {
         text = C_TEXT;
+    } else if (id == IDC_SB_CS) {
+        text = C_ORANGE;
     } else {
         /* 卡片上的小标签：机型/TAS/尾流/起飞/降落/备降/航路/备注/代码 */
         POINT pt;
@@ -397,16 +445,17 @@ static LRESULT on_ctlcolor_static(HWND ctrl, HDC dc)
 
 static LRESULT on_ctlcolor_edit(HWND ctrl, HDC dc)
 {
-    int id = GetDlgCtrlID(ctrl);
+    /* 注：RichEdit 日志自带底色/字色（EM_SETBKCOLOR + CHARFORMAT），
+     * 不走 WM_CTLCOLOREDIT；此处仅处理普通输入框 */
     SetBkMode(dc, TRANSPARENT);
-    if (id == IDC_XPDR_CODE) {
+    if (GetDlgCtrlID(ctrl) == IDC_XPDR_CODE) {
         SetTextColor(dc, C_GREEN);
         SetBkColor(dc, C_INPUT);
         return (LRESULT)G.br_input;
     }
     SetTextColor(dc, C_TEXT);
-    SetBkColor(dc, (id == IDC_LOG) ? C_LOGBG : C_INPUT);
-    return (id == IDC_LOG) ? (LRESULT)G.br_logbg : (LRESULT)G.br_input;
+    SetBkColor(dc, C_INPUT);
+    return (LRESULT)G.br_input;
 }
 
 /* ── 定时器 ── */
@@ -443,6 +492,17 @@ static void on_timer(HWND wnd)
     fl[sizeof(fl) - 1] = '\0';
     u16(fl, w, 128); SetWindowTextW(G.sb_flight, w);
 
+    /* 呼号段（在线显示实际呼号，断开 ---） */
+    {
+        char cs[40];
+        if (G.app.sess.state == SESS_ONLINE && G.app.cfg.callsign[0])
+            _snprintf(cs, sizeof(cs) - 1, "呼号: %s", G.app.cfg.callsign);
+        else
+            strcpy(cs, "呼号: ---");
+        cs[sizeof(cs) - 1] = '\0';
+        u16(cs, w, 128); SetWindowTextW(G.sb_callsign, w);
+    }
+
     if (GetFocus() != G.ed_xpdr) {
         char cur[16];
         GetWindowTextA(G.ed_xpdr, cur, sizeof(cur));
@@ -460,6 +520,59 @@ static void on_command(HWND wnd, int id, int code)
     switch (id) {
     case IDC_CONNECT:       do_connect(wnd); break;
     case IDC_WS_DISCONNECT: app_disconnect_fsd(&G.app); break;
+    case IDC_SRV_ADD: {
+        /* 用输入框当前文本追加服务器记录（去重，上限 CFG_MAX_SERVERS） */
+        wchar_t wv[128];
+        char sv[JSN_STR_CAP];
+        GetWindowTextW(G.cb_server, wv, 128);
+        u8(wv, sv, (int)sizeof(sv));
+        cfg_t *c = &G.app.cfg;
+        if (!sv[0])
+            break;
+        bool dup = false;
+        for (size_t i = 0; i < c->nservers; i++)
+            if (strcmp(c->servers[i], sv) == 0)
+                dup = true;
+        if (!dup && c->nservers < CFG_MAX_SERVERS) {
+            strncpy(c->servers[c->nservers], sv, JSN_STR_CAP - 1);
+            c->servers[c->nservers][JSN_STR_CAP - 1] = '\0';
+            c->nservers++;
+            wchar_t wsv[128];
+            u16(sv, wsv, 128);
+            ComboBox_AddString(G.cb_server, wsv);
+        }
+        break;
+    }
+    case IDC_SRV_DEL: {
+        if (G.app.cfg.nservers <= 1) {
+            MessageBoxW(wnd, L"至少需要保留一个服务器记录",
+                        L"无法删除", MB_ICONWARNING);
+            break;
+        }
+        if (MessageBoxW(wnd, L"删除选中的服务器记录？", L"确认删除",
+                        MB_YESNO | MB_ICONQUESTION) != IDYES)
+            break;
+        wchar_t wsel[128];
+        char sel[JSN_STR_CAP];
+        int cur = ComboBox_GetCurSel(G.cb_server);
+        if (cur >= 0)
+            SendMessageW(G.cb_server, CB_GETLBTEXT, cur, (LPARAM)wsel);
+        else
+            GetWindowTextW(G.cb_server, wsel, 128);
+        u8(wsel, sel, (int)sizeof(sel));
+        cfg_t *c = &G.app.cfg;
+        for (size_t i = 0; i < c->nservers; i++) {
+            if (strcmp(c->servers[i], sel) == 0) {
+                memmove(&c->servers[i], &c->servers[i + 1],
+                        (c->nservers - i - 1) * sizeof(c->servers[0]));
+                c->nservers--;
+                break;
+            }
+        }
+        if (cur >= 0)
+            ComboBox_DeleteString(G.cb_server, cur);
+        break;
+    }
     case IDC_ECO:           if (code == CBN_SELCHANGE) apply_eco_type(); break;
     case IDC_STBY:          app_set_xpdr_mode(&G.app, false); break;
     case IDC_ALT:           app_set_xpdr_mode(&G.app, true); break;
@@ -589,23 +702,25 @@ static LRESULT CALLBACK wnd_proc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         SetWindowTheme(G.cb_type, L"DarkMode_Explorer", NULL);
         SetWindowTheme(G.cb_server, L"DarkMode_Explorer", NULL);
         SetWindowTheme(G.cb_wake, L"DarkMode_Explorer", NULL);
-        SetWindowTheme(G.ed_log, L"DarkMode_Explorer", NULL);
         SetWindowTheme(G.ed_msg, L"DarkMode_Explorer", NULL);
 
-        /* 状态栏 */
+        /* 状态栏（WIN_W=640：conn/xpdr/flight/呼号/dll/开关） */
         int w = SC(WIN_W);
         int sb_y = SC(WIN_H) - SC(36);
         G.sb_conn = mk(wnd, L"STATIC", L"● 未连接", WS_VISIBLE,
-                       SC(14), sb_y + SC(8), SC(110), SC(20), IDC_SB_CONN);
+                       SC(14), sb_y + SC(8), SC(104), SC(20), IDC_SB_CONN);
         SendMessageW(G.sb_conn, WM_SETFONT, (WPARAM)G.f_small, TRUE);
         G.sb_xpdr = mk(wnd, L"STATIC", L"应答机: ALT 1200", WS_VISIBLE,
-                       SC(128), sb_y + SC(8), SC(150), SC(20), IDC_SB_XPDR);
+                       SC(122), sb_y + SC(8), SC(140), SC(20), IDC_SB_XPDR);
         SendMessageW(G.sb_xpdr, WM_SETFONT, (WPARAM)G.f_small, TRUE);
         G.sb_flight = mk(wnd, L"STATIC", L"高度: ---  地速: ---", WS_VISIBLE,
-                         SC(282), sb_y + SC(8), SC(164), SC(20), IDC_SB_FLIGHT);
+                         SC(266), sb_y + SC(8), SC(140), SC(20), IDC_SB_FLIGHT);
         SendMessageW(G.sb_flight, WM_SETFONT, (WPARAM)G.f_small, TRUE);
+        G.sb_callsign = mk(wnd, L"STATIC", L"呼号: ---", WS_VISIBLE,
+                           SC(410), sb_y + SC(8), SC(112), SC(20), IDC_SB_CS);
+        SendMessageW(G.sb_callsign, WM_SETFONT, (WPARAM)G.f_small, TRUE);
         G.sb_dll = mk(wnd, L"STATIC", L"DLL: ○ 等待", WS_VISIBLE,
-                      SC(450), sb_y + SC(8), SC(88), SC(20), IDC_SB_DLL);
+                      SC(526), sb_y + SC(8), SC(70), SC(20), IDC_SB_DLL);
         SendMessageW(G.sb_dll, WM_SETFONT, (WPARAM)G.f_small, TRUE);
         G.btn_mock = CreateWindowExW(0, L"BUTTON", L"",
                                      WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
@@ -627,13 +742,18 @@ static LRESULT CALLBACK wnd_proc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
         return on_ctlcolor_edit((HWND)lp, (HDC)wp);
     case WM_CTLCOLORLISTBOX: {
         HDC dc = (HDC)wp;
-        SetBkColor(dc, C_INPUT);
+        SetBkColor(dc, C_LOGBG);
         SetTextColor(dc, C_TEXT);
-        return (LRESULT)G.br_input;
+        return (LRESULT)G.br_logbg;
     }
-    case WM_DRAWITEM:
-        draw_btn_item((DRAWITEMSTRUCT *)lp);
+    case WM_DRAWITEM: {
+        DRAWITEMSTRUCT *d = (DRAWITEMSTRUCT *)lp;
+        if (d->CtlID == IDC_LOG)
+            draw_log_item(d);
+        else
+            draw_btn_item(d);
         return TRUE;
+    }
     case WM_COMMAND:
         on_command(wnd, LOWORD(wp), HIWORD(wp));
         break;
@@ -707,7 +827,7 @@ int gui_main(HINSTANCE hInst, int show)
 
     app_disconnect_fsd(&G.app);
     app_toggle_mock(&G.app, false);
-    cfg_from_ui();
+    cfg_from_ui_conn();   /* 只存连接字段——FP 字段断开时已重置（G9） */
     cfg_save(&G.app.cfg, path);
     net_cleanup();
     return (int)msg.wParam;

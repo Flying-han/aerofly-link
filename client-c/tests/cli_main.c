@@ -56,9 +56,9 @@ static BOOL WINAPI ctrl_handler(DWORD ev)
     return TRUE;
 }
 
-static void console_log(void *ud, const char *line)
+static void console_log(void *ud, app_log_kind_t kind, const char *line)
 {
-    (void)ud;
+    (void)ud; (void)kind;
     printf("%s\n", line);
 }
 
@@ -73,6 +73,11 @@ static void console_debug(void *ud, const char *line)
 {
     (void)ud;
     fprintf(stderr, "TRACE %s\n", line);
+}
+
+static void console_status(void *ud, const char *line)
+{
+    console_log(ud, APP_LOG_SYS, line);
 }
 
 int main(int argc, char **argv)
@@ -134,7 +139,7 @@ int main(int argc, char **argv)
     app_init(&app, &cfg);
     app.on_log = console_log;
     app.on_debug = console_debug;
-    app.on_status = console_log;
+    app.on_status = console_status;
     app.on_warning = console_warning;
     if (password)
         app_set_password(&app, password);
