@@ -77,6 +77,7 @@ typedef struct {
     fsd_linebuf     lb;
     char            scratch[FSD_MAX_LINE];   /* feed 输出复用 */
     double          deadline;                /* 当前阶段超时 */
+    double          last_recv;               /* 最近一次收到下行数据的时刻（读超时用） */
     double          next_keepalive;
     unsigned         diag_flags;             /* 握手期标志（$DI seen 等） */
 

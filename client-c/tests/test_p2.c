@@ -150,6 +150,20 @@ static void test_session_handshake(void)
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
     CHECK(strcmp(line, "$POTST123:SRV01") == 0);
 
+    /* G4 自机呼号容错：小写 / @包装 / 尾空白均过滤，TST1234 不误判 */
+    {
+        const char *bulk =
+            "@N:tst123:1200:2:31.200:121.900:35000:450:1024:0\r\n"
+            "@N:@TST123:1200:2:31.200:121.900:35000:450:1024:0\r\n"
+            "@N:TST123 :1200:2:31.200:121.900:35000:450:1024:0\r\n"
+            "@N:TST1234:1200:2:31.210:121.910:35000:450:1024:0\r\n";
+        send(cli, bulk, (int)strlen(bulk), 0);
+        net_wait_readable(s.sock, 1000);
+        sess_on_readable(&s);
+        CHECK(s.n_traffic == 2
+              && strcmp(s.traffic[1].callsign, "TST1234") == 0);
+    }
+
     /* 文本消息 */
     CHECK(sess_send_tm(&s, "ZGGG_TWR", "请求放行") == 0);
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
@@ -159,6 +173,13 @@ static void test_session_handshake(void)
     sess_tick(&s, net_now() + 31.0);
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
     CHECK(strcmp(line, "#TMTST123:SERVER:@") == 0);
+
+    /* G1 读超时：60s（<90）仍在线；95s 无下行判死（Python 同文案） */
+    sess_tick(&s, net_now() + 60.0);
+    CHECK(g_state == SESS_ONLINE);
+    sess_tick(&s, net_now() + 95.0);
+    CHECK(g_state == SESS_DISCONNECTED);
+    CHECK(strstr(g_last_msg, "连接超时") != NULL);
 
     /* 服务器关闭连接 → 自动离线 */
     closesocket(cli);

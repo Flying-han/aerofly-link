@@ -2,6 +2,7 @@
 #include "link/session.h"
 #include "link/protocol.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #define HANDSHAKE_TIMEOUT 10.0
 #define GREETING_TIMEOUT   3.0
 #define KEEPALIVE_INTERVAL 30.0
+#define READ_TIMEOUT       90.0   /* 接收超时（3×心跳，Python _read_timeout） */
 
 /* Swift 兼容能力集（Python CLIENT_CAPABILITIES） */
 static const char *CAPS_REPLY =
@@ -62,6 +64,7 @@ int sess_connect(sess_t *s)
     s->diag_flags = 0;
     s->has_position = false;
     s->n_traffic = 0;
+    s->last_recv = net_now();
     fsd_linebuf_init(&s->lb);
 
     SOCKET sock = INVALID_SOCKET;
@@ -243,11 +246,38 @@ static void traffic_remove(sess_t *s, const char *callsign)
     }
 }
 
+/* 呼号归一化：alnum_only=false 去首尾空白+大写；true 只保留字母数字+大写 */
+static void norm_cs(const char *in, char *out, size_t cap, bool alnum_only)
+{
+    size_t j = 0;
+    if (!alnum_only) {
+        const char *b = in, *e = in + strlen(in);
+        while (b < e && (*b == ' ' || *b == '\t')) b++;
+        while (e > b && (e[-1] == ' ' || e[-1] == '\t')) e--;
+        for (const char *p = b; p < e && j < cap - 1; p++)
+            out[j++] = (char)toupper((unsigned char)*p);
+    } else {
+        for (const char *p = in; *p && j < cap - 1; p++)
+            if (isalnum((unsigned char)*p))
+                out[j++] = (char)toupper((unsigned char)*p);
+    }
+    out[j] = '\0';
+}
+
 static bool is_own_callsign(const sess_t *s, const char *callsign)
 {
     if (!callsign[0] || !s->callsign[0])
         return false;
-    return strcmp(callsign, s->callsign) == 0;   /* 呼号经服务器注册，精确匹配即可 */
+    /* Python _is_own_callsign：strip+大写直比；不等则双方仅留字母数字再比
+     *（容忍 "@TST123"、" TST123 " 包装；TST123 与 TST1234 不误判） */
+    char a[32], b[32];
+    norm_cs(s->callsign, a, sizeof(a), false);
+    norm_cs(callsign, b, sizeof(b), false);
+    if (a[0] && strcmp(a, b) == 0)
+        return true;
+    norm_cs(s->callsign, a, sizeof(a), true);
+    norm_cs(callsign, b, sizeof(b), true);
+    return a[0] && strcmp(a, b) == 0;
 }
 
 static void online_line(sess_t *s, const char *line)
@@ -354,6 +384,7 @@ void sess_on_readable(sess_t *s)
             sess_disconnect(s, "接收错误");
             return;
         }
+        s->last_recv = net_now();
 
         size_t off = 0;
         while (off < (size_t)n) {
@@ -431,6 +462,12 @@ void sess_tick(sess_t *s, double now)
     if (s->state != SESS_ONLINE)
         return;
 
+    /* 读超时：长时间无下行数据判死（Python recv_loop 同语义同文案） */
+    if (now - s->last_recv >= READ_TIMEOUT) {
+        sess_disconnect(s, "连接超时：长时间无数据，服务器可能已关闭连接");
+        return;
+    }
+
     /* keepalive：legacy 用 #TM 空跳；VATSIM 用缓存位置重发 @（防跳变） */
     if (now >= s->next_keepalive) {
         s->next_keepalive = now + KEEPALIVE_INTERVAL;
@@ -458,7 +495,11 @@ void sess_tick(sess_t *s, double now)
                               (unsigned)pbh);
             line[n] = '\0';
         }
-        sess_send_raw(s, line);
+        /* 发送失败视为连接中断（Python drain 抛异常退出循环） */
+        if (sess_send_raw(s, line) != 0) {
+            sess_disconnect(s, "发送失败（连接中断）");
+            return;
+        }
     }
 }
 
