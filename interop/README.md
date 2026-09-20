@@ -12,8 +12,15 @@
    ```
 
    需要改的字段：`callsign`（测试呼号）、`cid`、`server`（ASC 服务器地址）、
-   `port`（一般 6809）。`type` 保持 `legacy`（revision 9 明文密码 + 服务端
-   bcrypt，与 ASC FSD 0.5.3 互验过的路径）。
+   `port`（一般 6809）。
+
+   **`type` 必须与你要用的连接模式一致**：
+   - `"type": "vatsim"`（VATSIM/swift 模式，**推荐**）——走 FSD-JWT 流程：
+     `$ID` → `POST {jwt_url}` 换短时效令牌 → `#AP` rev100。`jwt_url` 默认
+     `https://api.skeet.top/api/fsd-jwt`，私有部署可在配置里覆盖。
+   - `"type": "legacy"`（revision 9 明文密码 + 服务端 bcrypt）——要求账号
+     允许明文密码路径。
+   两种模式服务端都支持；大小写不敏感。
 
 ## 运行
 
@@ -29,11 +36,11 @@ client-c\build\aeroflylink-cli.exe --config interop\asc_live.json --password 你
 
 | # | 项 | 怎么看 |
 |---|----|--------|
-| 1 | 握手 ≤15s 认证完成 | `<<< $DI` → `>>> $ID`+`>>> #AP` → `[FSD] 已连接并认证` |
+| 1 | 握手 ≤15s 认证完成 | `<<< $DI` → `>>> $ID` →（vatsim 模式多一步 HTTPS）→ `>>> #AP` → `[FSD] 已连接并认证` |
 | 2 | 无 `#ER` 拒绝 | TRACE 中无 `<<< #ER` |
 | 3 | 1Hz 位置上报、服务端可见在线 | 每 1s 一条 `>>> @N:呼号:...`；服务器/雷达出现该呼号 |
 | 4 | 飞行计划被接受 | 握手即有 `>>> $FP...NOFP`；输入 `/fp` 后无 `#ER` 回显 |
-| 5 | 空闲 >10min 保持在线 | 放置 10 分钟，`>>> #TM呼号:SERVER:@` 每 30s 一条，不掉线 |
+| 5 | 空闲 >10min 保持在线 | 放置 10 分钟（vatsim 模式 keepalive 为缓存位置 `@` 重发；legacy 为 `#TM...:@`），不掉线 |
 | 6 | CAPS 应答 | 若服务器发 `<<< $CQ...:CAPS`，随后必有 `>>> $CR...CAPS:...` |
 | 7 | PING | `<<< $PI` → `>>> $PO`；`<<< $ZC` → `>>> $ZR` |
 | 8 | 收服务器文本 | `<<< #TM...` 在日志显示 |
@@ -49,6 +56,8 @@ client-c\build\aeroflylink-cli.exe --config interop\asc_live.json --password 你
 
 ## 常见问题
 
-- `认证超时`/`#ER`：核对 CID/密码；确认服务器允许 legacy revision 9。
+- `JWT 获取失败：JWT 换取被拒绝（HTTP 401）`：CID/密码错误，或账号未开通。
+- `$ER...006 Invalid CID/password`：legacy 模式凭据错误。
+- `认证超时`：服务器地址/端口或模式不对，先确认服务端允许所选模式。
 - `连接超时`（立刻出现）：地址/端口不通，用 `telnet <host> <port>` 先验。
 - 想换呼号重测：`--callsign TST456` 参数可临时覆盖。
