@@ -3,6 +3,7 @@
 #include "link/frame.h"
 #include "link/protocol.h"
 
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -268,4 +269,146 @@ int fsd_parse_position(const char *line, fsd_pilot_position *out)
     fsd_unpack_pbh(out->pbh, NULL, NULL, &hdg, &out->on_ground);
     out->heading_deg = hdg;
     return 0;
+}
+
+/* ── $FP 字段规范化 ── */
+
+/* strip（首尾空白）拷贝 */
+static void plan_copy(const char *in, char *out, size_t cap)
+{
+    const char *b = in ? in : "", *e = b + strlen(b);
+    while (b < e && (*b == ' ' || *b == '\t')) b++;
+    while (e > b && (e[-1] == ' ' || e[-1] == '\t')) e--;
+    size_t j = 0;
+    for (const char *p = b; p < e && j < cap - 1; p++)
+        out[j++] = *p;
+    out[j] = '\0';
+}
+
+/* strip + 大写拷贝 */
+static void plan_copy_upper(const char *in, char *out, size_t cap)
+{
+    const char *b = in ? in : "", *e = b + strlen(b);
+    while (b < e && (*b == ' ' || *b == '\t')) b++;
+    while (e > b && (e[-1] == ' ' || e[-1] == '\t')) e--;
+    size_t j = 0;
+    for (const char *p = b; p < e && j < cap - 1; p++)
+        out[j++] = (char)toupper((unsigned char)*p);
+    out[j] = '\0';
+}
+
+static bool plan_blank(const char *in)
+{
+    const char *p = in ? in : "";
+    while (*p) {
+        if (*p != ' ' && *p != '\t')
+            return false;
+        p++;
+    }
+    return true;
+}
+
+/* Python int(str)：可选首尾空白与符号，其余必须全为数字，否则 0；
+ * 结果即去前导零 */
+static void plan_int_str(const char *in, char *out, size_t cap)
+{
+    const char *p = in ? in : "";
+    while (*p == ' ' || *p == '\t') p++;
+    char *end = NULL;
+    long v = strtol(p, &end, 10);
+    if (end == p)
+        v = 0;
+    else {
+        while (*end == ' ' || *end == '\t') end++;
+        if (*end != '\0')
+            v = 0;
+    }
+    _snprintf(out, cap - 1, "%ld", v);
+    out[cap - 1] = '\0';
+}
+
+/* Python _split_hm："H:MM" 拆两段各自 int 归一化；无 ':' 双 "0"
+ *（"2:05:30" 的尾巴 "05:30" 非全数字 → "0"） */
+static void plan_split_hm(const char *in, char *h_out, char *m_out,
+                          size_t cap)
+{
+    const char *b = in ? in : "", *e = b + strlen(b);
+    while (b < e && (*b == ' ' || *b == '\t')) b++;
+    while (e > b && (e[-1] == ' ' || e[-1] == '\t')) e--;
+    const char *c = b;
+    while (c < e && *c != ':') c++;
+    if (c >= e) {
+        strcpy(h_out, "0");
+        strcpy(m_out, "0");
+        return;
+    }
+    char h[16], m[16];
+    size_t hl = (size_t)(c - b);
+    if (hl >= sizeof(h)) hl = sizeof(h) - 1;
+    memcpy(h, b, hl);
+    h[hl] = '\0';
+    size_t ml = (size_t)(e - (c + 1));
+    if (ml >= sizeof(m)) ml = sizeof(m) - 1;
+    memcpy(m, c + 1, ml);
+    m[ml] = '\0';
+    if (!h[0]) strcpy(h, "0");
+    if (!m[0]) strcpy(m, "0");
+    plan_int_str(h, h_out, cap);
+    plan_int_str(m, m_out, cap);
+}
+
+void fsd_normalize_plan(const fsd_plan_fields *in, fsd_plan_norm *o)
+{
+    memset(o, 0, sizeof(*o));
+    if (!in) {
+        o->type = 'I';
+        return;
+    }
+
+    o->type = (in->type && *in->type)
+        ? (char)toupper((unsigned char)in->type[0]) : 'I';
+
+    plan_copy_upper(in->aircraft, o->aircraft, sizeof(o->aircraft));
+    plan_copy_upper(in->wake, o->wake, sizeof(o->wake));
+
+    /* tas：strip+大写+去前导 N（可留空，原样进字段 5） */
+    plan_copy_upper(in->tas, o->tas, sizeof(o->tas));
+    size_t k = 0;
+    while (o->tas[k] == 'N')
+        k++;
+    if (k)
+        memmove(o->tas, o->tas + k, strlen(o->tas + k) + 1);
+
+    plan_copy_upper(in->dep, o->dep, sizeof(o->dep));
+    plan_copy_upper(in->dest, o->dest, sizeof(o->dest));
+    plan_copy_upper(in->altn, o->altn, sizeof(o->altn));
+    plan_copy(in->cruise_alt, o->cruise_alt, sizeof(o->cruise_alt));
+
+    plan_int_str(in->dep_time, o->dep_time, sizeof(o->dep_time));
+    if (plan_blank(in->actual_dep_time))
+        plan_int_str(in->dep_time, o->actual_dep, sizeof(o->actual_dep));
+    else
+        plan_int_str(in->actual_dep_time, o->actual_dep,
+                     sizeof(o->actual_dep));
+
+    plan_split_hm(in->eet, o->eet_h, o->eet_m, sizeof(o->eet_h));
+    plan_split_hm(in->endurance, o->fuel_h, o->fuel_m, sizeof(o->fuel_h));
+
+    plan_copy(in->pilot, o->pilot, sizeof(o->pilot));
+
+    /* route/remarks：':' → ' '（FSD 分隔符防护，无 strip） */
+    {
+        const char *src = in->route ? in->route : "";
+        size_t j = 0;
+        for (; *src && j < sizeof(o->route) - 1; src++, j++)
+            o->route[j] = (*src == ':') ? ' ' : *src;
+        o->route[j] = '\0';
+    }
+    {
+        const char *src = in->remarks ? in->remarks : "";
+        size_t j = 0;
+        for (; *src && j < sizeof(o->remarks) - 1; src++, j++)
+            o->remarks[j] = (*src == ':') ? ' ' : *src;
+        o->remarks[j] = '\0';
+    }
 }

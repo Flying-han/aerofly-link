@@ -590,106 +590,62 @@ int sess_send_tm(sess_t *s, const char *dest, const char *text)
     return sess_send_raw(s, line) == 0 ? 0 : -1;
 }
 
-/* 整数化字符串：Swift 风格去前导零，非法给 "0" */
-static void int_str(const char *in, char *out, size_t cap)
-{
-    long v = strtol(in && *in ? in : "0", NULL, 10);
-    _snprintf(out, cap - 1, "%ld", v);
-    out[cap - 1] = '\0';
-}
-
 int sess_send_flightplan(sess_t *s, const sess_fp_t *fp)
 {
     if (s->state != SESS_ONLINE)
         return -1;
 
+    /* 规范化先行：大写/去空白/时间数字化（Python 顺序——先大写
+     * 再判完整格式，"h/b772/l" 才能正确直用） */
+    fsd_plan_norm norm;
+    fsd_normalize_plan(fp, &norm);
+
     char line[FSD_MAX_LINE];
-    size_t pos = 0;
     int n;
 
     /* 机型字段：完整格式直用；VATSIM 简化 ICAO；legacy 用 FAA H/B772/L */
-    char aircraft[32];
-    const char *raw_ac = (fp->aircraft && *fp->aircraft) ? fp->aircraft : "";
-    const char *wake = (fp->wake && *fp->wake) ? fp->wake : "Medium";
-    if (strchr(raw_ac, '/')) {
-        strncpy(aircraft, raw_ac, sizeof(aircraft) - 1);
-        aircraft[sizeof(aircraft) - 1] = '\0';
+    char aircraft[56];
+    if (strchr(norm.aircraft, '/')) {
+        _snprintf(aircraft, sizeof(aircraft) - 1, "%s", norm.aircraft);
     } else if (s->vatsim) {
-        char wl = (wake[0] == 'L') ? 'L' : (wake[0] == 'H') ? 'H'
-                : (wake[0] == 'S') ? 'J' : 'M';
-        _snprintf(aircraft, sizeof(aircraft) - 1, "%s/%c", raw_ac, wl);
+        char wl = (norm.wake[0] == 'L') ? 'L' : (norm.wake[0] == 'H') ? 'H'
+                : (norm.wake[0] == 'S') ? 'J' : 'M';
+        _snprintf(aircraft, sizeof(aircraft) - 1, "%s/%c", norm.aircraft, wl);
     } else {
-        const char *prefix = (wake[0] == 'H') ? "H/" : (wake[0] == 'S') ? "J/" : "";
-        _snprintf(aircraft, sizeof(aircraft) - 1, "%s%s/L", prefix, raw_ac);
+        const char *prefix = (norm.wake[0] == 'H') ? "H/"
+                           : (norm.wake[0] == 'S') ? "J/" : "";
+        _snprintf(aircraft, sizeof(aircraft) - 1, "%s%s/L", prefix,
+                  norm.aircraft);
     }
     aircraft[sizeof(aircraft) - 1] = '\0';
 
-    char dep_t[16], act_t[16], eet_h[8], eet_m[8], fuel_h[8], fuel_m[8];
-    const char *eet = (fp->eet && *fp->eet) ? fp->eet : "";
-    const char *c = strchr(eet, ':');
-    if (c) {
-        char h[8];
-        size_t hl = (size_t)(c - eet);
-        if (hl >= sizeof(h)) hl = sizeof(h) - 1;
-        memcpy(h, eet, hl); h[hl] = '\0';
-        int_str(h, eet_h, sizeof(eet_h));
-        int_str(c + 1, eet_m, sizeof(eet_m));
-    } else {
-        strcpy(eet_h, "0"); strcpy(eet_m, "0");
-    }
-    const char *endu = (fp->endurance && *fp->endurance) ? fp->endurance : "";
-    c = strchr(endu, ':');
-    if (c) {
-        char h[8];
-        size_t hl = (size_t)(c - endu);
-        if (hl >= sizeof(h)) hl = sizeof(h) - 1;
-        memcpy(h, endu, hl); h[hl] = '\0';
-        int_str(h, fuel_h, sizeof(fuel_h));
-        int_str(c + 1, fuel_m, sizeof(fuel_m));
-    } else {
-        strcpy(fuel_h, "0"); strcpy(fuel_m, "0");
-    }
-    int_str((fp->dep_time && *fp->dep_time) ? fp->dep_time : "0", dep_t, sizeof(dep_t));
-    if (fp->actual_dep_time && *fp->actual_dep_time)
-        int_str(fp->actual_dep_time, act_t, sizeof(act_t));
-    else
-        strcpy(act_t, dep_t);
-
-    /* route/remarks 中的 ':' 破坏字段结构，替换为空格 */
-    char route[256], remarks[256];
-    strncpy(route, fp->route ? fp->route : "", sizeof(route) - 1);
-    route[sizeof(route) - 1] = '\0';
-    for (char *q = route; *q; q++) if (*q == ':') *q = ' ';
-    strncpy(remarks, fp->remarks ? fp->remarks : "", sizeof(remarks) - 1);
-    remarks[sizeof(remarks) - 1] = '\0';
-    for (char *q = remarks; *q; q++) if (*q == ':') *q = ' ';
-
     /* OPR/<pilot> 追加到备注（Python 基准） */
     char remarks_full[288];
-    if (fp->pilot && *fp->pilot && !strstr(remarks, "OPR/")) {
+    if (norm.pilot[0] && !strstr(norm.remarks, "OPR/")) {
         _snprintf(remarks_full, sizeof(remarks_full) - 1,
-                  remarks[0] ? "OPR/%s %s" : "OPR/%s", fp->pilot, remarks);
+                  norm.remarks[0] ? "OPR/%s %s" : "OPR/%s",
+                  norm.pilot, norm.remarks);
     } else {
-        _snprintf(remarks_full, sizeof(remarks_full) - 1, "%s", remarks);
+        _snprintf(remarks_full, sizeof(remarks_full) - 1, "%s",
+                  norm.remarks);
     }
     remarks_full[sizeof(remarks_full) - 1] = '\0';
 
     n = _snprintf(line, sizeof(line) - 1,
                   "$FP%s:SERVER:%c:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s",
                   s->callsign,
-                  (fp->type && *fp->type) ? fp->type[0] : 'I',
+                  norm.type,
                   aircraft,
-                  fp->tas ? fp->tas : "",
-                  fp->dep ? fp->dep : "",
-                  dep_t, act_t,
-                  fp->cruise_alt ? fp->cruise_alt : "",
-                  fp->dest ? fp->dest : "",
-                  eet_h, eet_m, fuel_h, fuel_m,
-                  fp->altn ? fp->altn : "",
+                  norm.tas,
+                  norm.dep,
+                  norm.dep_time, norm.actual_dep,
+                  norm.cruise_alt,
+                  norm.dest,
+                  norm.eet_h, norm.eet_m, norm.fuel_h, norm.fuel_m,
+                  norm.altn,
                   remarks_full,
-                  route);
+                  norm.route);
     line[n] = '\0';
-    (void)pos;
     return sess_send_raw(s, line) == 0 ? 0 : -1;
 }
 

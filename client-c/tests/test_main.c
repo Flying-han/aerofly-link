@@ -351,6 +351,102 @@ static void test_frame(void)
     }
 }
 
+/* ── $FP 字段规范化 ── */
+static void test_fp_normalize(void)
+{
+    printf("[fp_normalize]\n");
+    fsd_plan_norm o;
+    fsd_plan_fields in;
+
+    /* 大写 + strip：aircraft 简写与完整格式、机场 */
+    memset(&in, 0, sizeof(in));
+    in.type = "v";
+    in.aircraft = " b738 ";
+    in.wake = "heavy";
+    in.tas = " n450 ";
+    in.dep = "zbaa";
+    in.dest = " ZGGG ";
+    in.altn = "";
+    in.cruise_alt = "fl350";        /* 仅 strip，不大写（Python 如此） */
+    in.dep_time = " 0830 ";
+    in.eet = "2:05";
+    in.endurance = "1:30";
+    in.route = "A:B CDY";
+    in.remarks = "x:y";
+    in.pilot = " Tester ";
+    fsd_normalize_plan(&in, &o);
+    CHECK(o.type == 'V');
+    CHECK_STR(o.aircraft, "B738");
+    CHECK_STR(o.wake, "HEAVY");
+    CHECK_STR(o.tas, "450");        /* 大写后去前导 N */
+    CHECK_STR(o.dep, "ZBAA");
+    CHECK_STR(o.dest, "ZGGG");
+    CHECK_STR(o.altn, "");
+    CHECK_STR(o.cruise_alt, "fl350");
+    CHECK_STR(o.dep_time, "830");   /* 前导零剥离 */
+    CHECK_STR(o.actual_dep, "830"); /* actual 缺省回退 dep_time */
+    CHECK_STR(o.eet_h, "2");
+    CHECK_STR(o.eet_m, "5");        /* 分钟同样去前导零（Python int("05")=5） */
+    CHECK_STR(o.fuel_h, "1");
+    CHECK_STR(o.fuel_m, "30");
+    CHECK_STR(o.route, "A B CDY");  /* ':' → 空格 */
+    CHECK_STR(o.remarks, "x y");
+    CHECK_STR(o.pilot, "Tester");
+
+    /* 完整格式机型（已含 '/'，格式化层直用——此处验归一化保留） */
+    memset(&in, 0, sizeof(in));
+    in.aircraft = "h/b772/l";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.aircraft, "H/B772/L");
+
+    /* tas："NN450" 全剥前导 N；纯 "N" 剥空；无 N 不动 */
+    memset(&in, 0, sizeof(in));
+    in.tas = "NN450";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.tas, "450");
+    in.tas = "N";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.tas, "");
+    in.tas = "450";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.tas, "450");
+
+    /* 时间数字化：非法给 "0"；actual 显式值优先 */
+    memset(&in, 0, sizeof(in));
+    in.dep_time = "abc";
+    in.actual_dep_time = "0905";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.dep_time, "0");
+    CHECK_STR(o.actual_dep, "905");
+    memset(&in, 0, sizeof(in));
+    in.dep_time = "0830";
+    in.actual_dep_time = "  ";      /* 空白 = 未填 → 回退 dep_time */
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.actual_dep, "830");
+
+    /* EET "H:MM"：无 ':' 双 0；尾段非全数字判 0；空段给 0 */
+    memset(&in, 0, sizeof(in));
+    in.eet = "7";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.eet_h, "0");
+    CHECK_STR(o.eet_m, "0");
+    in.eet = "2:05:30";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.eet_h, "2");
+    CHECK_STR(o.eet_m, "0");
+    in.eet = "8:";
+    fsd_normalize_plan(&in, &o);
+    CHECK_STR(o.eet_h, "8");
+    CHECK_STR(o.eet_m, "0");
+
+    /* 缺省：type 空 → 'I'；NULL 安全 */
+    memset(&in, 0, sizeof(in));
+    fsd_normalize_plan(&in, &o);
+    CHECK(o.type == 'I');
+    fsd_normalize_plan(NULL, &o);
+    CHECK(o.type == 'I' && o.aircraft[0] == '\0');
+}
+
 int main(void)
 {
     printf("Aerofly Link C core 协议层测试\n===============================\n");
@@ -359,6 +455,7 @@ int main(void)
     test_coords();
     test_builders();
     test_parsers();
+    test_fp_normalize();
     test_frame();
     printf("===============================\n%d checks, %d failed\n",
            g_checks, g_failed);

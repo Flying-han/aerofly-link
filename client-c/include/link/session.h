@@ -41,18 +41,9 @@ typedef struct {
     bool    used;
 } sess_traffic_t;
 
-/* 飞行计划字段（对应 Python send_flight_plan 的 plan 字典） */
-typedef struct {
-    const char *type;          /* I/V/S/D 首字母自动取 */
-    const char *aircraft;      /* B738 或完整 H/B772/L */
-    const char *wake;          /* Light|Medium|Heavy|Super */
-    const char *tas;
-    const char *dep, *dest, *altn;
-    const char *dep_time, *actual_dep_time;
-    const char *cruise_alt;
-    const char *route, *remarks, *pilot;
-    const char *eet, *endurance;
-} sess_fp_t;
+/* 飞行计划字段（对应 Python send_flight_plan 的 plan 字典；结构定义
+ * 与规范化逻辑见 message.h 的 fsd_plan_fields/fsd_normalize_plan） */
+typedef fsd_plan_fields sess_fp_t;
 
 typedef struct {
     /* 必需配置（由调用方在 connect 前填好） */

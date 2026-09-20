@@ -133,4 +133,46 @@ typedef struct {
 
 int fsd_parse_atc_pos(const char *line, fsd_atc_pos *out);
 
+/* ── $FP 飞行计划：字段集与规范化 ──
+ * 字段集（调用方视角，字符串可为栈/配置缓冲，发送期间被只读使用）。
+ * 规范化（基准 core/fsd_client.py send_flight_plan 537-617）：
+ *   - aircraft/wake/dep/dest/altn：strip+大写
+ *   - tas：strip+大写+去前导 'N'（可留空）
+ *   - cruise_alt：仅 strip（不大写，Python 如此）
+ *   - dep_time/actual_dep/eet/endurance：Python int() 严格语义数字化
+ *     （"0830"→"830"，非全数字→"0"）；actual 空则回退 dep_time 再回退 "0"；
+ *     eet/endurance 需 "H:MM"，无 ':' 两段均 "0"（含 "2:05:30" 的尾巴判非法）
+ *   - route/remarks：':' → ' '（FSD 分隔符防护，不做 strip）
+ *   - type：首字母大写，缺省 'I'
+ */
+typedef struct {
+    const char *type;
+    const char *aircraft;
+    const char *wake;
+    const char *tas;
+    const char *dep, *dest, *altn;
+    const char *dep_time, *actual_dep_time;
+    const char *cruise_alt;
+    const char *route, *remarks, *pilot;
+    const char *eet, *endurance;
+} fsd_plan_fields;
+
+typedef struct {
+    char type;
+    char aircraft[48];
+    char wake[16];
+    char tas[16];
+    char dep[16], dest[16], altn[16];
+    char dep_time[16];
+    char actual_dep[16];
+    char cruise_alt[16];
+    char eet_h[8], eet_m[8];
+    char fuel_h[8], fuel_m[8];
+    char pilot[64];
+    char route[256];
+    char remarks[256];
+} fsd_plan_norm;
+
+void fsd_normalize_plan(const fsd_plan_fields *in, fsd_plan_norm *out);
+
 #endif /* LINK_FSD_MESSAGE_H */
