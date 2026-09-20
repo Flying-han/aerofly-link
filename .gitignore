@@ -48,6 +48,7 @@ config/settings.json
 
 # Installer data (large binaries)
 installer/data/
+client-c/setup/AeroflyBridge.dll
 installer/build_new*/
 installer/dist_new*/
 installer/dist/

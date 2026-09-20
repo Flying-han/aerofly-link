@@ -156,7 +156,8 @@ int main(int argc, char **argv)
     strcpy(app.fp_type, "I");
 
     printf("Aerofly Link CLI %s —— %s@%s:%d (%s/%s)\n",
-           "0.1.0", cfg.callsign, cfg.server, cfg.port, cfg.eco, cfg.type);
+           AEROFLYLINK_VERSION, cfg.callsign, cfg.server, cfg.port,
+           cfg.eco, cfg.type);
     printf("配置: %s\n输入 /help 查看控制台命令\n", cfg_path);
 
     if (use_mock)
