@@ -183,19 +183,21 @@ void build_ws_page(HWND wnd)
     SendMessageW(G.lbl_warning, WM_SETFONT, (WPARAM)G.f_small, TRUE);
     y += SC(192);
 
-    /* ── 卡片：FLIGHT PLAN（3×3 网格 + 航路/备注/提交行）── */
-    G.rc_card_fp = (RECT){ x, y, x + w, y + SC(270) };
+    /* ── 卡片：FLIGHT PLAN（3 列网格 5 行 + 航路/备注/提交行）── */
+    G.rc_card_fp = (RECT){ x, y, x + w, y + SC(410) };
     int cw = (w - SC(32) - SC(32)) / 3;
-    struct { const char *label; HWND *out; HWND *lbl_out; int id; } grid[] = {
-        { "机型", &G.ed_ac,      NULL,        IDC_FP_AIRCRAFT },
-        { "TAS",  &G.ed_tas,     NULL,        IDC_FP_TAS },
-        { "尾流", &G.cb_wake,    NULL,        IDC_FP_WAKE },
-        { "起飞", &G.ed_dep,     NULL,        IDC_FP_DEP },
-        { "降落", &G.ed_dest,    NULL,        IDC_FP_DEST },
-        { "备降", &G.ed_altn,    NULL,        IDC_FP_ALTN },
-        { "巡航", &G.ed_cruise,  NULL,        IDC_FP_CRUISE },
+    struct { const char *label; HWND *out; int id; } grid[] = {
+        { "机型",     &G.ed_ac,         IDC_FP_AIRCRAFT },
+        { "TAS",      &G.ed_tas,        IDC_FP_TAS },
+        { "尾流",     &G.cb_wake,       IDC_FP_WAKE },
+        { "起飞",     &G.ed_dep,        IDC_FP_DEP },
+        { "降落",     &G.ed_dest,       IDC_FP_DEST },
+        { "备降",     &G.ed_altn,       IDC_FP_ALTN },
+        { "巡航",     &G.ed_cruise,     IDC_FP_CRUISE },
+        { "类型",     &G.cb_fp_type,    IDC_FP_TYPE },
+        { "起飞时间", &G.ed_fp_deptime, IDC_FP_DEPTIME },
     };
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 9; i++) {
         int cx = x + SC(16) + (i % 3) * (cw + SC(16));
         int cy = y + SC(40) + (i / 3) * SC(56);
         wchar_t lblt[16];
@@ -211,37 +213,61 @@ void build_ws_page(HWND wnd)
             ComboBox_AddString(G.cb_wake, L"Heavy");
             ComboBox_AddString(G.cb_wake, L"Super");
             ComboBox_SetCurSel(G.cb_wake, 1);
+        } else if (grid[i].id == IDC_FP_TYPE) {
+            /* IFR/VFR/SVFR/DVFR（发送取首字母 I/V/S/D，对齐 Python） */
+            *grid[i].out = mk(wnd, L"COMBOBOX", L"",
+                              WS_VISIBLE | CBS_DROPDOWNLIST,
+                              cx, cy + SC(20), cw, SC(120), IDC_FP_TYPE);
+            ComboBox_AddString(G.cb_fp_type, L"IFR");
+            ComboBox_AddString(G.cb_fp_type, L"VFR");
+            ComboBox_AddString(G.cb_fp_type, L"SVFR");
+            ComboBox_AddString(G.cb_fp_type, L"DVFR");
+            ComboBox_SetCurSel(G.cb_fp_type, 0);
         } else {
             *grid[i].out = mk_edit(wnd, grid[i].id, cx, cy + SC(20), cw, SC(30));
         }
     }
-    /* 航路（第 3 行跨 2 列） */
-    int r3y = y + SC(152);
+    /* 第 4 行：实际起飞 / EET / 耐航 */
+    int r3y = y + SC(208);
+    struct { const char *label; HWND *out; int id; } row3[] = {
+        { "实际起飞", &G.ed_fp_acttime, IDC_FP_ACTTIME },
+        { "EET",      &G.ed_fp_eet,     IDC_FP_EET },
+        { "耐航",     &G.ed_fp_endur,   IDC_FP_ENDUR },
+    };
+    for (int i = 0; i < 3; i++) {
+        int cx = x + SC(16) + i * (cw + SC(16));
+        wchar_t lblt[16];
+        u16(row3[i].label, lblt, 16);
+        G.page_ws[G.n_ws++] = mk_label(wnd, lblt, cx, r3y, cw);
+        *row3[i].out = mk_edit(wnd, row3[i].id, cx, r3y + SC(20), cw, SC(30));
+    }
+    /* 航路（跨 3 列） */
+    int r4y = y + SC(264);
     wchar_t route_l[8]; u16("航路", route_l, 8);
-    lbl = mk_label(wnd, route_l, x + SC(16) + cw + SC(16), r3y, cw * 2 + SC(16));
+    lbl = mk_label(wnd, route_l, x + SC(16), r4y, w - SC(32));
     G.page_ws[G.n_ws++] = lbl;
-    G.ed_route = mk_edit(wnd, IDC_FP_ROUTE, x + SC(16) + cw + SC(16),
-                         r3y + SC(20), cw * 2 + SC(16), SC(30));
-    /* 备注（第 4 行跨 2 列）+ 提交按钮 */
-    int r4y = y + SC(208);
+    G.ed_route = mk_edit(wnd, IDC_FP_ROUTE, x + SC(16),
+                         r4y + SC(20), w - SC(32), SC(30));
+    /* 备注（跨 2 列）+ 提交按钮 */
+    int r5y = y + SC(320);
     wchar_t rmk_l[8]; u16("备注", rmk_l, 8);
-    lbl = mk_label(wnd, rmk_l, x + SC(16), r4y, cw * 2 + SC(16));
+    lbl = mk_label(wnd, rmk_l, x + SC(16), r5y, cw * 2 + SC(16));
     G.page_ws[G.n_ws++] = lbl;
     G.ed_remarks = mk_edit(wnd, IDC_FP_REMARKS, x + SC(16),
-                           r4y + SC(20), cw * 2 + SC(16), SC(30));
+                           r5y + SC(20), cw * 2 + SC(16), SC(30));
     wchar_t fpb_t[20]; u16("提交飞行计划", fpb_t, 20);
     G.btn_fp = CreateWindowExW(0, L"BUTTON", fpb_t,
                                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-                               x + SC(16) + cw * 2 + SC(32), r4y + SC(20),
+                               x + SC(16) + cw * 2 + SC(32), r5y + SC(20),
                                cw, SC(30), wnd,
                                (HMENU)(INT_PTR)IDC_FP_SUBMIT, NULL, NULL);
     SendMessageW(G.btn_fp, WM_SETFONT, (WPARAM)G.f_body, TRUE);
     reg_btn(G.btn_fp);
     G.lbl_fp_status = mk(wnd, L"STATIC", L"", WS_VISIBLE,
-                         x + SC(16) + cw * 2 + SC(32), r4y + SC(54),
+                         x + SC(16) + cw * 2 + SC(32), r5y + SC(54),
                          cw, SC(18), IDC_FP_STATUS);
     SendMessageW(G.lbl_fp_status, WM_SETFONT, (WPARAM)G.f_small, TRUE);
-    y += SC(286);
+    y += SC(426);
 
     /* ── 卡片：ATC MESSAGES（owner-draw ListBox：时间戳/按类着色）── */
     G.rc_card_log = (RECT){ x, y, x + w, y + SC(212) };
@@ -277,6 +303,9 @@ void build_ws_page(HWND wnd)
     ws[(*n)++] = G.ed_tas;         ws[(*n)++] = G.ed_dep;
     ws[(*n)++] = G.ed_dest;        ws[(*n)++] = G.ed_altn;
     ws[(*n)++] = G.ed_cruise;      ws[(*n)++] = G.ed_route;
+    ws[(*n)++] = G.cb_fp_type;     ws[(*n)++] = G.ed_fp_deptime;
+    ws[(*n)++] = G.ed_fp_acttime;  ws[(*n)++] = G.ed_fp_eet;
+    ws[(*n)++] = G.ed_fp_endur;
     ws[(*n)++] = G.ed_remarks;     ws[(*n)++] = G.lbl_fp_status;
     ws[(*n)++] = G.ed_log;         ws[(*n)++] = G.ed_msg;
     ws[(*n)++] = G.btn_send;
@@ -331,6 +360,8 @@ void ui_from_cfg(void)
     u16(c->fp_cruise, w, 256); SetWindowTextW(G.ed_cruise, w);
     u16(c->fp_route, w, 256); SetWindowTextW(G.ed_route, w);
     u16(c->fp_remarks, w, 256); SetWindowTextW(G.ed_remarks, w);
+    u16(c->fp_eet, w, 256); SetWindowTextW(G.ed_fp_eet, w);
+    u16(c->fp_endur, w, 256); SetWindowTextW(G.ed_fp_endur, w);
     const char *wake_names[] = { "Light", "Medium", "Heavy", "Super" };
     for (int i = 0; i < 4; i++)
         if (strcmp(c->fp_wake, wake_names[i]) == 0)
@@ -397,6 +428,8 @@ void cfg_from_ui_fp(void)
     GETTEXT(G.ed_cruise, c->fp_cruise, sizeof(c->fp_cruise));
     GETTEXT(G.ed_route, c->fp_route, sizeof(c->fp_route));
     GETTEXT(G.ed_remarks, c->fp_remarks, sizeof(c->fp_remarks));
+    GETTEXT(G.ed_fp_eet, c->fp_eet, sizeof(c->fp_eet));
+    GETTEXT(G.ed_fp_endur, c->fp_endur, sizeof(c->fp_endur));
 #undef GETTEXT
 
     GetWindowTextW(G.cb_wake, w, 256);
@@ -420,9 +453,14 @@ void reset_fp_fields(void)
     SetWindowTextW(G.ed_dest, L"");
     SetWindowTextW(G.ed_altn, L"");
     SetWindowTextW(G.ed_cruise, L"");
+    SetWindowTextW(G.ed_fp_deptime, L"");
+    SetWindowTextW(G.ed_fp_acttime, L"");
+    SetWindowTextW(G.ed_fp_eet, L"");
+    SetWindowTextW(G.ed_fp_endur, L"");
     SetWindowTextW(G.ed_route, L"");
     SetWindowTextW(G.ed_remarks, L"");
-    ComboBox_SetCurSel(G.cb_wake, 1);   /* Medium */
+    ComboBox_SetCurSel(G.cb_wake, 1);    /* Medium */
+    ComboBox_SetCurSel(G.cb_fp_type, 0); /* IFR */
     SetWindowTextW(G.lbl_fp_status, L"请先连接到服务器");
 }
 
@@ -484,23 +522,62 @@ void do_submit_fp(HWND wnd)
 {
     cfg_from_ui_fp();
     cfg_t *c = &G.app.cfg;
+
+    /* G8 校验（对齐 flightplan_panel：TAS 全数字 + 机场 4 字母），聚合报错 */
+    {
+        wchar_t msg[256] = L"";
+        bool tas_bad = !c->fp_tas[0];
+        for (const char *p = c->fp_tas; *p; p++)
+            if (*p < '0' || *p > '9')
+                tas_bad = true;
+        if (tas_bad) {
+            wchar_t seg[64];
+            wsprintfW(seg, L"TAS 必须是数字");
+            lstrcatW(msg, seg);
+        }
+        if (strlen(c->fp_dep) != 4) {
+            if (msg[0]) lstrcatW(msg, L"；");
+            lstrcatW(msg, L"起飞机场必须是 4 位 ICAO 码");
+        }
+        if (strlen(c->fp_dest) != 4) {
+            if (msg[0]) lstrcatW(msg, L"；");
+            lstrcatW(msg, L"降落机场必须是 4 位 ICAO 码");
+        }
+        if (msg[0]) {
+            SetWindowTextW(G.lbl_fp_status, msg);
+            return;
+        }
+    }
+
 #define FPCOPY(field, key) do { \
     strncpy(G.app.field, c->key, sizeof(G.app.field) - 1); \
     G.app.field[sizeof(G.app.field) - 1] = '\0'; } while (0)
-    strcpy(G.app.fp_type, "I");
+    /* G7 类型：IFR/VFR/SVFR/DVFR → I/V/S/D（Python [0].upper() 对齐） */
+    {
+        static const char types[5] = "IVSD";
+        int t = ComboBox_GetCurSel(G.cb_fp_type);
+        G.app.fp_type[0] = types[(t < 0) ? 0 : t];
+        G.app.fp_type[1] = '\0';
+    }
     FPCOPY(fp_aircraft_buf, fp_aircraft); FPCOPY(fp_wake_buf, fp_wake);
     FPCOPY(fp_tas_buf, fp_tas);           FPCOPY(fp_dep_buf, fp_dep);
     FPCOPY(fp_dest_buf, fp_dest);         FPCOPY(fp_altn_buf, fp_altn);
     FPCOPY(fp_cruise_buf, fp_cruise);     FPCOPY(fp_route_buf, fp_route);
     FPCOPY(fp_remarks_buf, fp_remarks);   FPCOPY(fp_eet_buf, fp_eet);
     FPCOPY(fp_endur_buf, fp_endur);
-    strcpy(G.app.fp_dep_time_buf, "0");
-    strcpy(G.app.fp_act_buf, "0");
 #undef FPCOPY
-    if (!G.app.fp_aircraft_buf[0] || !G.app.fp_tas_buf[0]
-        || !G.app.fp_dep_buf[0] || !G.app.fp_dest_buf[0]) {
-        SetWindowTextW(G.lbl_fp_status, L"机型 / TAS / 起降机场为必填");
-        return;
+    /* 起飞/实际起飞时间为会话内临时值，不持久化 */
+    {
+        wchar_t wv[16];
+        char sv[16];
+        GetWindowTextW(G.ed_fp_deptime, wv, 16);
+        u8(wv, sv, sizeof(sv));
+        strncpy(G.app.fp_dep_time_buf, sv, sizeof(G.app.fp_dep_time_buf) - 1);
+        G.app.fp_dep_time_buf[sizeof(G.app.fp_dep_time_buf) - 1] = '\0';
+        GetWindowTextW(G.ed_fp_acttime, wv, 16);
+        u8(wv, sv, sizeof(sv));
+        strncpy(G.app.fp_act_buf, sv, sizeof(G.app.fp_act_buf) - 1);
+        G.app.fp_act_buf[sizeof(G.app.fp_act_buf) - 1] = '\0';
     }
     if (app_submit_flightplan(&G.app) == 0)
         SetWindowTextW(G.lbl_fp_status, L"飞行计划已提交");

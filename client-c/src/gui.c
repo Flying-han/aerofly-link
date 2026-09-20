@@ -464,6 +464,17 @@ static void on_timer(HWND wnd)
     app_poll(&G.app, 0);
     sync_pages();
 
+    /* 起飞时间自动填 UTC（仅工作区可见且字段为空时；不覆盖手输，
+     * 对齐 Python _refresh_utc） */
+    if (G.page_shown == 1 && GetWindowTextLengthW(G.ed_fp_deptime) == 0) {
+        SYSTEMTIME st;
+        GetSystemTime(&st);
+        wchar_t t[8];
+        _snwprintf(t, 7, L"%02d%02d", st.wHour, st.wMinute);
+        t[7] = 0;
+        SetWindowTextW(G.ed_fp_deptime, t);
+    }
+
     if (G.warn_until && net_now() > G.warn_until) {
         ShowWindow(G.lbl_warning, SW_HIDE);
         G.warn_until = 0;

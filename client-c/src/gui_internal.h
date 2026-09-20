@@ -35,7 +35,9 @@ enum {
     IDC_XPDR_CODE, IDC_Q1200, IDC_Q7000, IDC_Q7700, IDC_Q7600, IDC_Q7500,
     IDC_STBY, IDC_ALT, IDC_IDENT, IDC_XPDR_WARNING,
     IDC_FP_AIRCRAFT, IDC_FP_WAKE, IDC_FP_TAS, IDC_FP_DEP, IDC_FP_DEST,
-    IDC_FP_ALTN, IDC_FP_CRUISE, IDC_FP_ROUTE, IDC_FP_REMARKS,
+    IDC_FP_ALTN, IDC_FP_CRUISE, IDC_FP_TYPE, IDC_FP_DEPTIME,
+    IDC_FP_ACTTIME, IDC_FP_EET, IDC_FP_ENDUR,
+    IDC_FP_ROUTE, IDC_FP_REMARKS,
     IDC_FP_SUBMIT, IDC_FP_STATUS,
     IDC_LOG, IDC_MSG, IDC_SEND,
     IDC_SRV_ADD, IDC_SRV_DEL,
@@ -50,7 +52,7 @@ enum {
 
 /* 主窗口客户区逻辑尺寸（SC() 按 DPI 缩放） */
 #define WIN_W 640
-#define WIN_H 800
+#define WIN_H 940
 
 typedef struct { HWND h; bool hover; WNDPROC old; } obtn_t;
 
@@ -81,6 +83,7 @@ typedef struct {
     HWND    lbl_ws_status, btn_disconnect;
     HWND    ed_xpdr, btn_q[5], btn_stby, btn_alt, btn_ident, lbl_warning;
     HWND    ed_ac, cb_wake, ed_tas, ed_dep, ed_dest, ed_altn, ed_cruise;
+    HWND    cb_fp_type, ed_fp_deptime, ed_fp_acttime, ed_fp_eet, ed_fp_endur;
     HWND    ed_route, ed_remarks, btn_fp, lbl_fp_status;
     HWND    ed_log, ed_msg, btn_send;
     HWND    sb_conn, sb_xpdr, sb_flight, sb_callsign, sb_dll, btn_mock;
