@@ -221,10 +221,12 @@ void br_collect_fds(const bridge_t *b, fd_set *r, fd_set *w, int *max)
     (void)max;
     if (b->tel_sock == INVALID_SOCKET)
         return;
-    if (b->tel_connecting)
-        FD_SET(b->tel_sock, w);
-    else
+    if (b->tel_connecting) {
+        if (w)
+            FD_SET(b->tel_sock, w);
+    } else if (r) {
         FD_SET(b->tel_sock, r);
+    }
 }
 
 /* ── 命令端口（短连接）── */

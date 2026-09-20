@@ -185,12 +185,15 @@ static void pump(bridge_t *b, mocksrv_t *m, int ms)
 {
     double end = net_now() + ms / 1000.0;
     while (net_now() < end) {
-        fd_set r;
+        fd_set r, w;
         FD_ZERO(&r);
+        FD_ZERO(&w);
         mocksrv_collect_fds(m, &r, NULL);
-        br_collect_fds(b, &r, NULL, NULL);
+        br_collect_fds(b, &r, &w, NULL);
         struct timeval tv = { 0, 10000 };
-        select(0, &r, NULL, NULL, &tv);
+        select(0, &r, &w, NULL, &tv);
+        if (b->tel_sock != INVALID_SOCKET && FD_ISSET(b->tel_sock, &w))
+            br_on_writable(b);
         mocksrv_on_readable(m, &r);
         br_on_readable(b);
         double now = net_now();
@@ -315,6 +318,7 @@ static void test_json(void)
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0); /* 崩溃时不丢缓冲输出，便于定位 */
     printf("Aerofly Link C 传输/应用层测试\n===============================\n");
     net_init();
     test_json();
