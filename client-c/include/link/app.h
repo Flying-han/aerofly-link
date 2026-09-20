@@ -25,6 +25,7 @@ typedef struct {
     /* 输出回调（均可 NULL） */
     void *ud;
     void (*on_log)(void *ud, const char *line);                 /* 通讯/系统日志 */
+    void (*on_debug)(void *ud, const char *line);               /* 协议原始行跟踪 */
     void (*on_status)(void *ud, const char *line);              /* 连接状态行 */
     void (*on_xpdr)(void *ud);                                  /* 应答机状态变化 */
     void (*on_warning)(void *ud, const char *msg);              /* 面板警告（已去重） */

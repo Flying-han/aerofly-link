@@ -28,6 +28,17 @@ static void set_state(sess_t *s, sess_state_t st, const char *msg)
         s->on_status(s->ud, st, msg);
 }
 
+/* 协议原始行跟踪（AEROFLYLINK_DEBUG；对齐 Python debug_line 信号） */
+static void trace_line(sess_t *s, const char *dir, const char *line)
+{
+    if (!s->trace || !s->on_debug)
+        return;
+    char buf[232];
+    _snprintf(buf, sizeof(buf) - 1, "%s %.200s", dir, line);
+    buf[sizeof(buf) - 1] = '\0';
+    s->on_debug(s->ud, buf);
+}
+
 static int sess_send_raw(sess_t *s, const char *line)
 {
     if (s->sock == INVALID_SOCKET)
@@ -38,6 +49,8 @@ static int sess_send_raw(sess_t *s, const char *line)
         return -1;
     buf[n] = '\0';
     int rc = net_send_all(s->sock, buf, (size_t)n, 2000);
+    if (rc == 0)
+        trace_line(s, ">>>", line);
     return rc == 0 ? 0 : -1;
 }
 
@@ -411,6 +424,7 @@ void sess_on_readable(sess_t *s)
             off += consumed;
             if (rc == 1) {
                 got_lines++;
+                trace_line(s, "<<<", s->scratch);
                 if (s->state == SESS_HANDSHAKE)
                     handshake_line(s, s->scratch);
                 else if (s->state == SESS_ONLINE)

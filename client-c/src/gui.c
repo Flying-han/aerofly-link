@@ -131,6 +131,15 @@ static void log_append(const char *line)
 /* ── app 回调 ── */
 static void cb_log(void *ud, const char *line) { (void)ud; log_append(line); }
 
+static void cb_debug(void *ud, const char *line)
+{
+    (void)ud;
+    char tagged[600];
+    _snprintf(tagged, sizeof(tagged) - 1, "[trace] %s", line);
+    tagged[sizeof(tagged) - 1] = '\0';
+    log_append(tagged);
+}
+
 static void cb_status(void *ud, const char *line)
 {
     (void)ud;
@@ -1179,6 +1188,7 @@ int gui_main(HINSTANCE hInst, int show)
 
     app_init(&G.app, &cfg);
     G.app.on_log = cb_log;
+    G.app.on_debug = cb_debug;
     G.app.on_status = cb_status;
     G.app.on_warning = cb_warning;
     G.app.on_xpdr = cb_xpdr;

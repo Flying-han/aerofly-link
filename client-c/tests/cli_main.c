@@ -68,6 +68,13 @@ static void console_warning(void *ud, const char *msg)
     printf("[警告] %s\n", msg);
 }
 
+/* 协议原始行跟踪（AEROFLYLINK_DEBUG 开启时由 app 接线）→ stderr */
+static void console_debug(void *ud, const char *line)
+{
+    (void)ud;
+    fprintf(stderr, "TRACE %s\n", line);
+}
+
 int main(int argc, char **argv)
 {
     SetConsoleOutputCP(CP_UTF8);
@@ -126,6 +133,7 @@ int main(int argc, char **argv)
     app_t app;
     app_init(&app, &cfg);
     app.on_log = console_log;
+    app.on_debug = console_debug;
     app.on_status = console_log;
     app.on_warning = console_warning;
     if (password)

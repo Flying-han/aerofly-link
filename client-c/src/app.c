@@ -47,6 +47,13 @@ static void sess_tm_cb(void *ud, const char *from, const char *to, const char *t
     app_log(a, "%s → %s: %s", from, to, text);
 }
 
+static void sess_debug_cb(void *ud, const char *line)
+{
+    app_t *a = (app_t *)ud;
+    if (a->on_debug)
+        a->on_debug(a->ud, line);
+}
+
 static void bridge_conn_cb(void *ud, bool connected)
 {
     app_t *a = (app_t *)ud;
@@ -104,6 +111,8 @@ void app_init(app_t *a, const cfg_t *cfg)
     a->sess.ud = a;
     a->sess.on_status = sess_status_cb;
     a->sess.on_tm = sess_tm_cb;
+    a->sess.on_debug = sess_debug_cb;
+    a->sess.trace = (getenv("AEROFLYLINK_DEBUG") != NULL);
     a->bridge.ud = a;
     a->bridge.on_conn = bridge_conn_cb;
 }

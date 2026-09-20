@@ -36,6 +36,19 @@ static void st_cb(void *ud, sess_state_t st, const char *msg)
     g_state = st;
     strncpy(g_last_msg, msg, sizeof(g_last_msg) - 1);
 }
+
+/* G6 协议跟踪捕获 */
+static char g_trace[64][240];
+static size_t g_n_trace;
+static void trace_cb(void *ud, const char *line)
+{
+    (void)ud;
+    if (g_n_trace < 64) {
+        strncpy(g_trace[g_n_trace], line, sizeof(g_trace[0]) - 1);
+        g_trace[g_n_trace][sizeof(g_trace[0]) - 1] = '\0';
+    }
+    g_n_trace++;
+}
 static void tm_cb(void *ud, const char *from, const char *to, const char *text)
 {
     (void)ud; (void)from; (void)to;
@@ -92,6 +105,11 @@ static void test_session_handshake(void)
     s.init_lat = 31.1434; s.init_lon = 121.8082; s.init_alt_ft = 11483;
     s.on_status = st_cb;
     s.on_tm = tm_cb;
+
+    /* G6 协议跟踪：先关后开对比（关时零产生） */
+    s.trace = true;
+    s.on_debug = trace_cb;
+    g_n_trace = 0;
 
     CHECK(sess_connect(&s) == 0);
     CHECK(g_state == SESS_CONNECTING);
@@ -195,6 +213,21 @@ static void test_session_handshake(void)
     sess_tick(&s, net_now() + 95.0);
     CHECK(g_state == SESS_DISCONNECTED);
     CHECK(strstr(g_last_msg, "连接超时") != NULL);
+
+    /* G6 跟踪内容：问候有 <<<、发送有 >>>；断开时 #DP 恰好一条 >>> */
+    {
+        bool saw_di_in = false, saw_tm_out = false;
+        size_t dp_out = 0;
+        for (size_t i = 0; i < g_n_trace && i < 64; i++) {
+            if (strncmp(g_trace[i], "<<< $DI", 7) == 0)
+                saw_di_in = true;
+            if (strstr(g_trace[i], ">>> #TMTST123:ZGGG_TWR") == g_trace[i])
+                saw_tm_out = true;
+            if (strncmp(g_trace[i], ">>> #DP", 7) == 0)
+                dp_out++;
+        }
+        CHECK(saw_di_in && saw_tm_out && dp_out == 1);
+    }
 
     /* 服务器关闭连接 → 自动离线 */
     closesocket(cli);

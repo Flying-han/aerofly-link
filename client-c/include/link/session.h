@@ -63,6 +63,9 @@ typedef struct {
     void (*on_status)(void *ud, sess_state_t st, const char *msg);
     void (*on_tm)(void *ud, const char *from, const char *to, const char *text);
     void (*on_traffic)(void *ud, const sess_traffic_t *list, size_t n);
+    /* 协议原始行跟踪（">>> line"/"<<< line"），trace=false 时不产生 */
+    void (*on_debug)(void *ud, const char *line);
+    bool trace;
 
     /* 运行时（sess_* 内部维护） */
     sess_state_t    state;
