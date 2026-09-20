@@ -5,28 +5,52 @@ on:
   pull_request:
 
 jobs:
-  python:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - run: python -m pip install -r requirements-dev.txt
-      - run: python -m compileall main.py main_window.py core ui installer
-      - run: python -m pytest tests core -q
-
-  # 注：仓库内 dll/ 目录是「参考脚手架」，生产使用外部开源 AeroflyBridge.dll
-  # （协议与客户端不兼容，见 docs/adr/0002-external-bridge-dll.md），
-  # 因此不再在 CI 中编译它。
-  c-core:
-    # client-c 协议层骨架防烂尾（docs/C_REWRITE_PLAN.md P0）
+  c-client:
+    # C 客户端构建 + 单测 + 产物上传（单轨，docs/C_REWRITE_PLAN.md）
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
-      - name: Build & test core protocol layer
+          version: 0.15.1
+      - name: Build & test
         shell: cmd
         run: client-c\build.cmd
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeroflylink-binaries
+          path: |
+            client-c/build/aeroflylink.exe
+            client-c/build/aeroflylink.exe.manifest
+            client-c/build/aeroflylink-cli.exe
+          if-no-files-found: error
+
+  installer:
+    # 安装器编译验证（ISCC 语法 / VERSION 读取 / 载荷路径）
+    # AeroflyBridge.dll 为 gitignored 载荷，CI 用占位文件仅验证脚本本身
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.15.1
+      - name: Build
+        shell: cmd
+        run: client-c\build.cmd
+      - name: Place placeholder bridge DLL
+        shell: cmd
+        run: |
+          cd client-c\setup
+          rem 占位仅验证 .iss 编译；真实载荷由 release.yml 从上游下载
+          echo placeholder>AeroflyBridge.dll
+      - name: Compile installer
+        shell: cmd
+        run: |
+          choco install innosetup -y --no-progress
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" client-c\setup\aerofly_link_setup.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist_installer/*.exe
+          if-no-files-found: error

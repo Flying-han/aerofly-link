@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.15.1
+      - name: Build & test
+        shell: cmd
+        run: client-c\build.cmd
+      - name: Fetch external bridge DLL
+        shell: cmd
+        run: |
+          rem 发布载荷：上游开源 AeroflyBridge.dll（ADR 0002，版本跟进 RELEASE.md）
+          curl -L -o client-c\setup\AeroflyBridge.dll ^
+            https://github.com/jlgabriel/Aerofly-FS4-Bridge/releases/download/v0.3.1/AeroflyBridge.dll
+      - name: Build installer
+        shell: cmd
+        run: |
+          choco install innosetup -y --no-progress
+          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" client-c\setup\aerofly_link_setup.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist_installer/*.exe
+          if-no-files-found: error
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: cmd
+        run: gh release create %GITHUB_REF_NAME% --generate-notes dist_installer\AeroflyLink_Setup_*.exe
