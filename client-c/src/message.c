@@ -137,6 +137,7 @@ fsd_msg_type fsd_classify(const char *line)
     if (strncmp(line, "#AP", 3) == 0)  return FSD_MSG_ATC_POS;
     if (strncmp(line, "#DP", 3) == 0)  return FSD_MSG_DP;
     if (strncmp(line, "#ER", 3) == 0)  return FSD_MSG_ERROR;
+    if (strncmp(line, "$ER", 3) == 0)  return FSD_MSG_ERROR;
     if (strncmp(line, "$CQ", 3) == 0)  return FSD_MSG_CQ;
     if (strncmp(line, "$PI", 3) == 0)  return FSD_MSG_PI;
     if (strncmp(line, "$ZC", 3) == 0)  return FSD_MSG_ZC;

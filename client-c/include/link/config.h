@@ -25,6 +25,7 @@ typedef struct {
     int  rating;              /* 默认 FSD_RATING_DEFAULT (S1) */
     char eco[16];             /* vatsim | private | legacy */
     char type[16];            /* vatsim | legacy */
+    char jwt_url[256];        /* FSD-JWT 换取端点（type=vatsim 时用） */
     char model[8];
 
     /* 模拟 DLL 初始位置（字符串形式，与 Python 配置一致，空 = 用默认） */

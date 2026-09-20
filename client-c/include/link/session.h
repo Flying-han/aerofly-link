@@ -54,7 +54,8 @@ typedef struct {
     char server[128];
     int  port;
     int  rating;
-    bool vatsim;              /* true=VATSIM dialect(rev100+$ID)，false=legacy(rev9) */
+    bool vatsim;              /* true=VATSIM dialect(FSD-JWT rev100)，false=legacy(rev9) */
+    char jwt_url[256];        /* FSD-JWT 换取端点（vatsim 模式用） */
     double init_lat, init_lon;
     int  init_alt_ft;
 

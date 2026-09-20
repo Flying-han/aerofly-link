@@ -1,5 +1,6 @@
 /* session.c —— FSD 会话状态机实现（基准：core/fsd_client.py） */
 #include "link/session.h"
+#include "link/http.h"
 #include "link/protocol.h"
 
 #include <ctype.h>
@@ -118,7 +119,8 @@ static void handshake_send_auth(sess_t *s)
 {
     char line[FSD_MAX_LINE];
 
-    /* VATSIM dialect 或确认了 $DI 的私服：先发 $ID（挑战留空） */
+    /* VATSIM dialect 或确认了 $DI 的私服：先发 $ID（挑战留空——
+     * 服务器仅要求结构合法，作为进入 JWT 换取流程的触发） */
     if (s->vatsim || (s->diag_flags & HF_DI_SEEN)) {
         fsd_ident_args id = {
             .callsign = s->callsign,
@@ -132,10 +134,32 @@ static void handshake_send_auth(sess_t *s)
         s->diag_flags |= HF_ID_SENT;
     }
 
+    /* FSD-JWT（ASC/swift 兼容网络）：POST {cid,password} 换短时效 JWT，
+     * #AP 密码位填 JWT + revision 100。阻塞 HTTPS，超时 10s，
+     * 每次登录至多一次（docs/compatibility/fsd-jwt.md 契约）。 */
+    const char *auth_password = s->password;
+    int revision = FSD_REVISION_LEGACY;
+    if (s->vatsim) {
+        char token[1024], err[192];
+        if (jwt_acquire(s->jwt_url, s->cid, s->password,
+                        token, sizeof(token), err, sizeof(err)) != 0) {
+            char msg[320];
+            _snprintf(msg, sizeof(msg) - 1, "JWT 获取失败：%s", err);
+            msg[sizeof(msg) - 1] = '\0';
+            sess_disconnect(s, msg);
+            return;
+        }
+        auth_password = token;
+        revision = FSD_REVISION_VATSIM;
+    }
+
     fsd_auth_args auth = {
-        .callsign = s->callsign, .cid = s->cid, .password = s->password,
-        .realname = s->realname, .rating = s->rating,
-        .revision = s->vatsim ? FSD_REVISION_VATSIM : FSD_REVISION_LEGACY,
+        .callsign = s->callsign, .cid = s->cid, .password = auth_password,
+        .realname = s->realname,
+        /* 飞行员 #AP rating 位固定 1（VATSIM 惯例；ASC 服务端校验
+         * data[4]-1 == Normal，与配置的 rating 无关） */
+        .rating = 1,
+        .revision = revision,
         .sim_type_code = "0",
     };
     if (fsd_build_auth(line, sizeof(line), &auth) == 0)
@@ -183,13 +207,17 @@ static void handshake_line(sess_t *s, const char *line)
     if (!line[0])
         return;
 
+    /* $ER<server>:<callsign>:<errno>:<from>:<text>：错误包（swift 格式，
+     * ASC 认证失败如 006 Invalid CID/password 以此送达）。
+     * #ER：旧式错误包。两者都必须透传给用户，绝不能静默吞掉。 */
+    if (strncmp(line, "$ER", 3) == 0 || strncmp(line, "#ER", 3) == 0) {
+        sess_disconnect(s, line);
+        return;
+    }
+
     if (line[0] == '#') {
-        if (strncmp(line, "#ER", 3) == 0) {
-            sess_disconnect(s, line);   /* 服务器拒绝/认证失败 */
-            return;
-        }
+        /* 认证后的任意 # 消息（#TM 欢迎 / #AA 回显 / #SB）= 认证通过 */
         if (s->diag_flags & HF_AUTH_SENT) {
-            /* 认证后的任意 # 消息（#TM 欢迎 / #AA 回显 / #SB）= 认证通过 */
             handshake_online(s);
             return;
         }

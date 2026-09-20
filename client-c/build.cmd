@@ -19,7 +19,7 @@ if errorlevel 1 (
 )
 
 set "CFLAGS=-std=c11 -Wall -Wextra -Wshadow -O2 -Iinclude -DWIN32_LEAN_AND_MEAN -DNOMINMAX"
-set "LIBS=-lws2_32 -ldwmapi -luxtheme -lgdi32 -lcomctl32 -lcomdlg32"
+set "LIBS=-lws2_32 -ldwmapi -luxtheme -lgdi32 -lcomctl32 -lcomdlg32 -lwinhttp"
 rem 静态链接 CRT（G5：单文件无运行时依赖）；版本号来自 VERSION 单一来源
 set "LDFLAGS=-static"
 set /p VER=<VERSION
@@ -39,9 +39,10 @@ zig cc %CFLAGS% -c src/bridge.c          -o %BUILD%/bridge.obj          || exit 
 zig cc %CFLAGS% -c src/transponder.c     -o %BUILD%/transponder.obj     || exit /b 1
 zig cc %CFLAGS% -c src/mock.c            -o %BUILD%/mock.obj            || exit /b 1
 zig cc %CFLAGS% -c src/app.c             -o %BUILD%/app.obj             || exit /b 1
+zig cc %CFLAGS% -c src/http.c            -o %BUILD%/http.obj            || exit /b 1
 
 echo [2/6] archiving libfsd.a...
-zig ar rcs %BUILD%/libfsd.a %BUILD%/protocol.obj %BUILD%/message.obj %BUILD%/frame.obj %BUILD%/json.obj %BUILD%/config.obj %BUILD%/net.obj %BUILD%/session.obj %BUILD%/bridge.obj %BUILD%/transponder.obj %BUILD%/mock.obj %BUILD%/app.obj || exit /b 1
+zig ar rcs %BUILD%/libfsd.a %BUILD%/protocol.obj %BUILD%/message.obj %BUILD%/frame.obj %BUILD%/json.obj %BUILD%/config.obj %BUILD%/net.obj %BUILD%/session.obj %BUILD%/bridge.obj %BUILD%/transponder.obj %BUILD%/mock.obj %BUILD%/app.obj %BUILD%/http.obj || exit /b 1
 
 echo [3/6] building protocol tests...
 zig cc %CFLAGS% -c tests/test_main.c     -o %BUILD%/test_main.obj       || exit /b 1

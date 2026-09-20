@@ -8,6 +8,7 @@
  */
 #include "link/app.h"
 #include "link/config.h"
+#include "link/http.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -133,7 +134,8 @@ static void test_session_handshake(void)
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
     CHECK(strcmp(line, "$IDTST123:SERVER:0000:Aerofly Link:1.0:Aerofly FS 4:WIN:0:") == 0);
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
-    CHECK(strcmp(line, "#APTST123:SERVER:1111111:pw:2:9:0:Tester") == 0);
+    /* 飞行员 #AP rating 位固定 1（VATSIM/ASC 服务端要求，与配置 rating 无关） */
+    CHECK(strcmp(line, "#APTST123:SERVER:1111111:pw:1:9:0:Tester") == 0);
 
     /* 认证通过 */
     send(cli, "#TM authenticated\r\n", 19, 0);
@@ -237,6 +239,83 @@ static void test_session_handshake(void)
 
     closesocket(lst);
     sess_disconnect(&s, NULL);
+}
+
+/* $ER 错误包（swift 格式）：握手期必须透传为断开原因（ASC 006 场景） */
+static void test_er_handshake(void)
+{
+    printf("[er handshake]\n");
+    SOCKET lst = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    SOCKADDR_IN addr;
+    int alen = sizeof(addr);
+    CHECK(lst != INVALID_SOCKET);
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    CHECK(bind(lst, (SOCKADDR *)&addr, sizeof(addr)) == 0);
+    CHECK(listen(lst, 1) == 0);
+    getsockname(lst, (SOCKADDR *)&addr, &alen);
+    int port = ntohs(addr.sin_port);
+
+    sess_t s;
+    sess_init(&s);
+    strcpy(s.callsign, "TST123");
+    strcpy(s.cid, "1111111");
+    strcpy(s.password, "pw");
+    strcpy(s.realname, "Tester");
+    strcpy(s.server, "127.0.0.1");
+    s.port = port;
+    s.rating = 2;
+    s.vatsim = false;
+    s.on_status = st_cb;
+    g_state = SESS_DISCONNECTED;
+    g_last_msg[0] = '\0';
+
+    CHECK(sess_connect(&s) == 0);
+    if (net_wait_writable(s.sock, 3000) > 0)
+        sess_on_writable(&s);
+    SOCKET cli = accept(lst, NULL, NULL);
+    CHECK(cli != INVALID_SOCKET);
+
+    /* 问候 + $ER 拒绝：必须以 $ER 文本为断开原因，而非“服务器关闭” */
+    send(cli, "$DISERVER:CLIENT:VATSIM FSD V3.13:ab\r\n"
+              "$ERSERVER:TST123:006:TST123:Invalid CID/password\r\n", 88, 0);
+    net_wait_readable(s.sock, 1000);
+    sess_on_readable(&s);
+    CHECK(g_state == SESS_DISCONNECTED);
+    CHECK(strstr(g_last_msg, "Invalid CID/password") != NULL);
+
+    closesocket(cli);
+    closesocket(lst);
+    sess_disconnect(&s, NULL);
+}
+
+/* FSD-JWT 辅助：JSON 转义与配置容错 */
+static void test_jwt_helpers(void)
+{
+    printf("[jwt helpers]\n");
+    char buf[256];
+
+    CHECK(http_json_escape("a\"b\\c\nd", buf, sizeof(buf)) == 0);
+    CHECK(strcmp(buf, "a\\\"b\\\\c\\nd") == 0);
+    CHECK(http_json_escape("", buf, sizeof(buf)) == 0 && buf[0] == '\0');
+    CHECK(http_json_escape("\x01", buf, sizeof(buf)) == 0);
+    CHECK(strcmp(buf, "\\u0001") == 0);
+
+    /* 配置 type 大小写不敏感（"VATSIM" 是 ASC 网络的实际写法） */
+    {
+        cfg_t c;
+        cfg_defaults(&c);
+        strcpy(c.type, "VATSIM");
+        app_t a;
+        app_init(&a, &c);
+        CHECK(a.sess.vatsim == true);
+        CHECK(strcmp(a.sess.jwt_url, "https://api.skeet.top/api/fsd-jwt") == 0);
+        strcpy(c.type, "legacy");
+        app_init(&a, &c);
+        CHECK(a.sess.vatsim == false);
+    }
 }
 
 /* ── 2. 桥接 ↔ 内嵌 Mock 契约 ── */
@@ -433,6 +512,8 @@ int main(void)
     test_json();
     test_config();
     test_session_handshake();
+    test_er_handshake();
+    test_jwt_helpers();
     test_bridge_mock_contract();
     net_cleanup();
     printf("===============================\n%d checks, %d failed\n",

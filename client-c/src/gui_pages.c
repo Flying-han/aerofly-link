@@ -389,6 +389,18 @@ void cfg_from_ui_conn(void)
     GETTEXT(G.ed_realname, c->realname, sizeof(c->realname));
     GETTEXT(G.ed_model, c->model, sizeof(c->model));
     GETTEXT(G.cb_server, s, 256);
+
+    /* ECO/TYPE 下拉持久化（此前只影响本次会话，重启即丢） */
+    {
+        int eco = ComboBox_GetCurSel(G.cb_eco);
+        const char *ecos = eco == 0 ? "vatsim" : eco == 2 ? "legacy" : "private";
+        int type_sel = ComboBox_GetCurSel(G.cb_type);
+        const char *types = type_sel == 0 ? "vatsim" : "legacy";
+        strncpy(c->eco, ecos, sizeof(c->eco) - 1);
+        c->eco[sizeof(c->eco) - 1] = '\0';
+        strncpy(c->type, types, sizeof(c->type) - 1);
+        c->type[sizeof(c->type) - 1] = '\0';
+    }
 #undef GETTEXT
     {
         char host[128] = "";

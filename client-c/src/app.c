@@ -2,6 +2,7 @@
 #include "link/app.h"
 #include "link/protocol.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -92,6 +93,18 @@ static int dll_write_code_cb(void *ud, const char *code)
     return (rc == 0 && strstr(resp, "\"ok\"")) ? 0 : -1;
 }
 
+/* 大小写不敏感比较（配置容错："VATSIM"/"vatsim"/"Legacy" 等写法等价） */
+static int ci_eq(const char *a, const char *b)
+{
+    while (*a && *b) {
+        int ca = tolower((unsigned char)*a++);
+        int cb = tolower((unsigned char)*b++);
+        if (ca != cb)
+            return 0;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
 void app_init(app_t *a, const cfg_t *cfg)
 {
     memset(a, 0, sizeof(*a));
@@ -108,7 +121,11 @@ void app_init(app_t *a, const cfg_t *cfg)
     strncpy(a->sess.server, cfg->server, sizeof(a->sess.server) - 1);
     a->sess.port = cfg->port;
     a->sess.rating = cfg->rating;
-    a->sess.vatsim = (strcmp(cfg->type, "vatsim") == 0);
+    a->sess.vatsim = ci_eq(cfg->type, "vatsim");
+    strncpy(a->sess.jwt_url, cfg->jwt_url, sizeof(a->sess.jwt_url) - 1);
+    a->sess.jwt_url[sizeof(a->sess.jwt_url) - 1] = '\0';
+    if (!a->sess.jwt_url[0])
+        strcpy(a->sess.jwt_url, "https://api.skeet.top/api/fsd-jwt");
     /* CLI 路径：密码可从 cfg（内存中）带入；GUI 路径用 app_set_password */
     strncpy(a->sess.password, cfg->password, sizeof(a->sess.password) - 1);
     a->sess.password[sizeof(a->sess.password) - 1] = '\0';

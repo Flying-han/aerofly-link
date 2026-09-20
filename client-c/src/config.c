@@ -22,6 +22,7 @@ void cfg_defaults(cfg_t *c)
     c->rating = FSD_RATING_DEFAULT;
     copy_str(c->eco, sizeof(c->eco), "private");
     copy_str(c->type, sizeof(c->type), "legacy");
+    copy_str(c->jwt_url, sizeof(c->jwt_url), "https://api.skeet.top/api/fsd-jwt");
     copy_str(c->mock_lat, sizeof(c->mock_lat), "51.4775");
     copy_str(c->mock_lon, sizeof(c->mock_lon), "-0.4614");
     copy_str(c->mock_alt, sizeof(c->mock_alt), "3500");
@@ -59,6 +60,7 @@ int cfg_load(cfg_t *c, const char *path)
     get_str(doc, "model", c->model, sizeof(c->model));
     get_str(doc, "eco", c->eco, sizeof(c->eco));
     get_str(doc, "type", c->type, sizeof(c->type));
+    get_str(doc, "jwt_url", c->jwt_url, sizeof(c->jwt_url));
 
     if (jsn_number(doc, "port", &num) && num > 0 && num < 65536)
         c->port = (int)num;
@@ -114,6 +116,7 @@ int cfg_save(const cfg_t *c, const char *path)
         "  \"rating\": %d,\n"
         "  \"eco\": \"%s\",\n"
         "  \"type\": \"%s\",\n"
+        "  \"jwt_url\": \"%s\",\n"
         "  \"model\": \"%s\",\n"
         "  \"mock_lat\": \"%s\",\n"
         "  \"mock_lon\": \"%s\",\n"
@@ -131,7 +134,7 @@ int cfg_save(const cfg_t *c, const char *path)
         "  \"endurance\": \"%s\",\n"
         "  \"servers\": [",
         c->callsign, c->cid, c->realname, c->server, c->port, c->rating,
-        c->eco, c->type, c->model,
+        c->eco, c->type, c->jwt_url, c->model,
         c->mock_lat, c->mock_lon, c->mock_alt,
         c->fp_aircraft, c->fp_wake, c->fp_tas,
         c->fp_dep, c->fp_dest, c->fp_altn, c->fp_cruise,
