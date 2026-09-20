@@ -28,4 +28,12 @@ bool jsn_string(const char *doc, const char *key, char *out, size_t cap);
 bool jsn_string_array(const char *doc, const char *key,
                       char out[][JSN_STR_CAP], size_t max, size_t *count);
 
+/* 服务器历史读取，兼容两种形态：
+ *   - 扁平数组 ["a", "b"]（当前 C 版写法）
+ *   - per-ECO 字典 {"vatsim":[...],"private":[...],"legacy":[...]}
+ *     （旧版 Python 写法；按 vatsim→private→legacy 顺序拼接，跨组精确
+ *     去重，超上限截断）。两者都不命中时返回 false（调用方保持默认）。 */
+bool jsn_read_servers(const char *doc, const char *key,
+                      char out[][JSN_STR_CAP], size_t max, size_t *count);
+
 #endif /* LINK_JSON_H */

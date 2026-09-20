@@ -69,8 +69,8 @@ int cfg_load(cfg_t *c, const char *path)
     get_str(doc, "mock_lon", c->mock_lon, sizeof(c->mock_lon));
     get_str(doc, "mock_alt", c->mock_alt, sizeof(c->mock_alt));
 
-    /* 服务器历史：读到多少存多少 */
-    jsn_string_array(doc, "servers", c->servers, CFG_MAX_SERVERS, &c->nservers);
+    /* 服务器历史：读到多少存多少（兼容旧版 per-ECO dict 形态） */
+    jsn_read_servers(doc, "servers", c->servers, CFG_MAX_SERVERS, &c->nservers);
 
     /* 飞行计划持久字段 */
     get_str(doc, "aircraft", c->fp_aircraft, sizeof(c->fp_aircraft));

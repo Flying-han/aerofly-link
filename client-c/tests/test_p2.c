@@ -350,6 +350,46 @@ static void test_json(void)
     size_t cnt = 0;
     CHECK(jsn_string_array(doc, "servers", arr, 8, &cnt) && cnt == 2);
     CHECK(strcmp(arr[0], "x.net") == 0 && strcmp(arr[1], "y.org") == 0);
+
+    /* G5 服务器历史：per-ECO dict 兼容（旧版 Python 写法） */
+    const char *dict_doc =
+        "{\"servers\":{\"vatsim\":[\"a.net\"],"
+        "\"private\":[\"b.net\"],"
+        "\"legacy\":[\"c.net\",\"a.net\"]}}";
+    CHECK(jsn_read_servers(dict_doc, "servers", arr, 8, &cnt)
+          && cnt == 3);   /* a.net 跨组去重 */
+    CHECK(strcmp(arr[0], "a.net") == 0 && strcmp(arr[1], "b.net") == 0
+          && strcmp(arr[2], "c.net") == 0);
+    CHECK(jsn_read_servers(doc, "servers", arr, 8, &cnt)
+          && cnt == 2);   /* 扁平数组回归 */
+    const char *empty_dict = "{\"servers\":{}}";
+    CHECK(jsn_read_servers(empty_dict, "servers", arr, 8, &cnt) && cnt == 0);
+    const char *bad_group = "{\"servers\":{\"vatsim\": 3}}";
+    CHECK(jsn_read_servers(bad_group, "servers", arr, 8, &cnt) && cnt == 0);
+    CHECK(!jsn_read_servers("{\"servers\": 5}", "servers", arr, 8, &cnt));
+
+    /* cfg_load 对 Python 全量 settings.json（dict 形态）的兼容回归 */
+    {
+        const char *py_cfg =
+            "{\n"
+            "  \"callsign\": \"CES2101\",\n"
+            "  \"cid\": \"1234567\",\n"
+            "  \"realname\": \"Tester\",\n"
+            "  \"server\": \"fsd.skeet.top\",\n"
+            "  \"port\": 6809,\n"
+            "  \"rating\": 3,\n"
+            "  \"servers\": {\"vatsim\":[\"one.net\"], \"legacy\":[\"two.net\"]}\n"
+            "}";
+        cfg_t c;
+        cfg_defaults(&c);
+        FILE *f = fopen("build\\py_settings.json", "wb");
+        fwrite(py_cfg, 1, strlen(py_cfg), f);
+        fclose(f);
+        cfg_load(&c, "build\\py_settings.json");
+        CHECK(strcmp(c.callsign, "CES2101") == 0);
+        CHECK(c.nservers == 2 && strcmp(c.servers[0], "one.net") == 0
+              && strcmp(c.servers[1], "two.net") == 0);
+    }
 }
 
 int main(void)
