@@ -1,0 +1,14 @@
+{
+  "callsign": "TST123",
+  "cid": "你的CID",
+  "realname": "Interop Test",
+  "server": "服务器地址",
+  "port": 6809,
+  "rating": 2,
+  "eco": "private",
+  "type": "legacy",
+  "mock_lat": "31.1434",
+  "mock_lon": "121.8082",
+  "mock_alt": "3000",
+  "servers": []
+}

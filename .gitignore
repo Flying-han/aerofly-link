@@ -46,6 +46,9 @@ fsd_packets.log
 # User config (contains credentials)
 config/settings.json
 
+# Interop test scratch (contains credentials)
+interop/
+
 # Installer data (large binaries)
 installer/data/
 client-c/setup/AeroflyBridge.dll
