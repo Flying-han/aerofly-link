@@ -50,7 +50,8 @@ zig cc %BUILD%/cli_main.obj %BUILD%/libfsd.a %LIBS% -o %BUILD%/aeroflylink-cli.e
 
 echo [5/6] building GUI client...
 zig cc %CFLAGS% -c src/gui.c             -o %BUILD%/gui.obj             || exit /b 1
-zig cc %BUILD%/gui.obj %BUILD%/libfsd.a %LIBS% -mwindows -o %BUILD%/aeroflylink.exe || exit /b 1
+zig cc %CFLAGS% -c src/gui_pages.c       -o %BUILD%/gui_pages.obj       || exit /b 1
+zig cc %BUILD%/gui.obj %BUILD%/gui_pages.obj %BUILD%/libfsd.a %LIBS% -mwindows -o %BUILD%/aeroflylink.exe || exit /b 1
 copy /y aeroflylink.exe.manifest %BUILD%\aeroflylink.exe.manifest >nul
 
 echo [6/6] running tests...
