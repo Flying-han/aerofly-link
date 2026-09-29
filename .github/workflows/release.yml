@@ -5,47 +5,92 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
-    runs-on: windows-latest
+    name: Build and publish the Windows installer
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.15.1
-      - name: Build & test
+
+      - name: Confirm tag matches client version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath 'client-c/VERSION' -Raw).Trim()
+          $expectedTag = "v$version"
+          if ($env:GITHUB_REF_NAME -cne $expectedTag) {
+            throw "Tag '$env:GITHUB_REF_NAME' does not match client-c/VERSION ($expectedTag)."
+          }
+
+      - name: Build and run C tests
         shell: cmd
         run: client-c\build.cmd
-      - name: Fetch external bridge DLL
-        shell: cmd
+
+      - name: Fetch and verify the upstream AeroflyBridge DLL
+        shell: pwsh
         run: |
-          rem 发布载荷：上游开源 AeroflyBridge.dll（ADR 0002，版本跟进 RELEASE.md）
-          curl -L -o client-c\setup\AeroflyBridge.dll ^
-            https://github.com/jlgabriel/Aerofly-FS4-Bridge/releases/download/v0.3.1/AeroflyBridge.dll
+          $bridgeUrl = 'https://github.com/jlgabriel/Aerofly-FS4-Bridge/releases/download/v0.3.1/AeroflyBridge.dll'
+          $bridgePath = 'client-c/setup/AeroflyBridge.dll'
+          curl.exe --fail --show-error --location --retry 3 --retry-all-errors --output $bridgePath $bridgeUrl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $expectedHash = (Get-Content -LiteralPath 'client-c/setup/AeroflyBridge.sha256' -Raw).Trim().ToLowerInvariant()
+          if ($expectedHash -notmatch '^[0-9a-f]{64}$') { throw 'The pinned Bridge SHA-256 value is malformed.' }
+          $actualHash = (Get-FileHash -LiteralPath $bridgePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne $expectedHash) {
+            throw "Bridge DLL SHA-256 mismatch. Expected $expectedHash; received $actualHash."
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.7.1 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build installer
-        shell: cmd
+        shell: pwsh
         run: |
-          choco install innosetup -y --no-progress
-          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" client-c\setup\aerofly_link_setup.iss
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          & $compiler 'client-c/setup/aerofly_link_setup.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Generate installer checksum
         shell: pwsh
         run: |
-          $installers = @(Get-ChildItem dist_installer -Filter 'AeroflyLink_Setup_*.exe')
-          if ($installers.Count -ne 1) { throw "Expected one installer, found $($installers.Count)" }
+          $installers = @(Get-ChildItem -LiteralPath 'dist_installer' -Filter 'AeroflyLink_Setup_*.exe')
+          if ($installers.Count -ne 1) { throw "Expected one installer, found $($installers.Count)." }
           $hash = (Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           $line = "$hash  $($installers[0].Name)" + "`n"
           [IO.File]::WriteAllText('dist_installer/SHA256SUMS.txt', $line, [Text.Encoding]::ASCII)
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload release build evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: installer
+          name: aeroflylink-release-${{ github.ref_name }}
           path: |
             dist_installer/AeroflyLink_Setup_*.exe
             dist_installer/SHA256SUMS.txt
           if-no-files-found: error
-      - name: Attach to GitHub Release
+          retention-days: 14
+
+      - name: Attach installer and checksum to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: cmd
-        run: gh release create %GITHUB_REF_NAME% --generate-notes dist_installer\AeroflyLink_Setup_*.exe dist_installer\SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath 'dist_installer' -Filter 'AeroflyLink_Setup_*.exe')
+          if ($installers.Count -ne 1) { throw "Expected one installer, found $($installers.Count)." }
+          & gh release create $env:GITHUB_REF_NAME --verify-tag --generate-notes $installers[0].FullName 'dist_installer/SHA256SUMS.txt'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

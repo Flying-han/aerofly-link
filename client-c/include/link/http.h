@@ -2,7 +2,7 @@
  * http.h —— FSD-JWT 登录令牌获取（WinHTTPS，系统 winhttp.dll，无外部依赖）
  * ================================================================
  * ASC/swift 兼容网络（ADR 0002 / docs/compatibility/fsd-jwt.md）的
- * VATSIM 模式登录流程：
+ * FSD-JWT/revision-100 认证流程（内部历史字段名曾为 vatsim）：
  *   1. 服务器问候 $DISERVER:CLIENT:<ident>:<challenge>
  *   2. 客户端 $ID（结构合法即可，进入 JWT 换取流程）
  *   3. POST {jwt_url}  body {"cid":"..","password":".."}

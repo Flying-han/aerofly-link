@@ -313,6 +313,26 @@ static void test_jwt_helpers(void)
     CHECK(http_json_escape("\x01", buf, sizeof(buf)) == 0);
     CHECK(strcmp(buf, "\\u0001") == 0);
 
+    /* JWT URLs must be HTTPS, unambiguous, and safe to receive credentials. */
+    {
+        const char *bad_urls[] = {
+            "http://example.invalid/token",
+            "https://user:password@example.invalid/token",
+            "https://example.invalid:0/token",
+            "https://example.invalid:65536/token",
+            "https://example..invalid/token",
+            "https://example.invalid/token#fragment",
+            "https://example.invalid/\r\nX-Injected: yes"
+        };
+        char response[128], token[128], error[128];
+        for (size_t i = 0; i < sizeof(bad_urls) / sizeof(bad_urls[0]); ++i) {
+            CHECK(http_post_json(bad_urls[i], NULL, NULL, "{}",
+                                 response, sizeof(response), token, sizeof(token),
+                                 error, sizeof(error), 100) == -1);
+            CHECK(strstr(error, "URL") != NULL);
+        }
+    }
+
     /* 配置 type 大小写不敏感（"VATSIM" 是 ASC 网络的实际写法） */
     {
         cfg_t c;
@@ -426,19 +446,28 @@ static void test_config(void)
     const char *path = "build\\test_settings.json";
     cfg_t c;
     cfg_defaults(&c);
+    CHECK(strcmp(c.server, "flight.skeet.top") == 0 && c.port == 6809);
+    CHECK(c.nservers == 1
+          && strcmp(c.servers[0], "flight.skeet.top:6809") == 0);
+    CHECK(strcmp(c.language, "zh-CN") == 0 && strcmp(c.theme, "dark") == 0);
 
     strcpy(c.callsign, "CES2101");
     strcpy(c.cid, "1234567");
     strcpy(c.password, "SECRET");      /* 绝不能落盘 */
+    strcpy(c.realname, "Pilot \"Ace\" \\ Flight\nLine two");
     strcpy(c.server, "fsd.skeet.top");
     strcpy(c.jwt_url, "https://community-fsd.example.invalid/api/fsd-jwt");
     strcpy(c.jwt_proxy, "http=127.0.0.1:10808;https=127.0.0.1:10808");
     strcpy(c.jwt_proxy_bypass, "localhost;127.0.0.1;::1");
     c.port = 6809;
     c.rating = 3;
+    strcpy(c.language, "zh-HK");
+    strcpy(c.theme, "light");
     strcpy(c.mock_lat, "40.0801");
     strcpy(c.fp_route, "CDY G212 KR");
-    strcpy(c.servers[0], "fsd.skeet.top");
+    strcpy(c.fp_type, "VFR");
+    strcpy(c.fp_remarks, "line one\nquote: \"clear\"\tend");
+    strcpy(c.servers[0], "fsd.skeet.top:6809");
     c.nservers = 1;
 
     CHECK(cfg_save(&c, path) == 0);
@@ -447,14 +476,27 @@ static void test_config(void)
     cfg_defaults(&r);
     CHECK(cfg_load(&r, path) == 0);
     CHECK(strcmp(r.callsign, "CES2101") == 0);
+    CHECK(strcmp(r.type, "vatsim") == 0);
+    CHECK(strcmp(r.realname, "Pilot \"Ace\" \\ Flight\nLine two") == 0);
     CHECK(strcmp(r.server, "fsd.skeet.top") == 0);
     CHECK(strcmp(r.jwt_url, "https://community-fsd.example.invalid/api/fsd-jwt") == 0);
     CHECK(strcmp(r.jwt_proxy, "http=127.0.0.1:10808;https=127.0.0.1:10808") == 0);
     CHECK(strcmp(r.jwt_proxy_bypass, "localhost;127.0.0.1;::1") == 0);
     CHECK(r.port == 6809 && r.rating == 3);
+    CHECK(strcmp(r.language, "zh-HK") == 0 && strcmp(r.theme, "light") == 0);
     CHECK(strcmp(r.mock_lat, "40.0801") == 0);
     CHECK(strcmp(r.fp_route, "CDY G212 KR") == 0);
-    CHECK(r.nservers == 1 && strcmp(r.servers[0], "fsd.skeet.top") == 0);
+    CHECK(strcmp(r.fp_type, "VFR") == 0);
+    CHECK(strcmp(r.fp_remarks, "line one\nquote: \"clear\"\tend") == 0);
+    CHECK(r.nservers == 1 && strcmp(r.servers[0], "fsd.skeet.top:6809") == 0);
+
+    /* An invalid in-memory count must not replace the last good settings file. */
+    c.nservers = CFG_MAX_SERVERS + 1;
+    CHECK(cfg_save(&c, path) == -1);
+    cfg_t preserved;
+    cfg_defaults(&preserved);
+    CHECK(cfg_load(&preserved, path) == 0);
+    CHECK(strcmp(preserved.callsign, "CES2101") == 0);
 
     /* ADR 0003 回归：读回的文档不含密码 */
     FILE *f = fopen(path, "rb");
@@ -464,6 +506,17 @@ static void test_config(void)
     fclose(f);
     CHECK(strstr(doc, "SECRET") == NULL);
     CHECK(strstr(doc, "password") == NULL);
+    CHECK(strstr(doc, "\"auth_mode\": \"fsd-jwt\"") != NULL);
+    CHECK(strstr(doc, "\"type\":") == NULL);
+    CHECK(strstr(doc, "\"eco\":") == NULL);
+
+    strcpy(c.type, "legacy");
+    c.nservers = 1;
+    CHECK(cfg_save(&c, path) == 0);
+    cfg_t legacy;
+    cfg_defaults(&legacy);
+    CHECK(cfg_load(&legacy, path) == 0);
+    CHECK(strcmp(legacy.type, "legacy") == 0);
 
     /* 缺文件 → 默认值，不致命 */
     cfg_t d;
@@ -491,6 +544,16 @@ static void test_json(void)
     CHECK(!jsn_number(frame, "missing", &v));
     CHECK(!jsn_string(frame, "Aircraft.Latitude", s, sizeof(s)));  /* 数字非字符串 */
 
+    const char *escaped = "{\"first\":\"a \\\"b\\\" { }\",\"later\":\"good\"}";
+    CHECK(jsn_string(escaped, "first", s, sizeof(s))
+          && strcmp(s, "a \"b\" { }") == 0);
+    CHECK(jsn_string(escaped, "later", s, sizeof(s)) && strcmp(s, "good") == 0);
+    const char *unicode = "{\"name\":\"\\u4e2d\\ud83d\\ude80\"}";
+    CHECK(jsn_string(unicode, "name", s, sizeof(s))
+          && strcmp(s, "\xE4\xB8\xAD\xF0\x9F\x9A\x80") == 0);
+    CHECK(!jsn_string("{\"name\":\"bad\\x20\"}", "name", s, sizeof(s)));
+    CHECK(!jsn_string("{\"name\":\"bad\\u0000tail\"}", "name", s, sizeof(s)));
+
     const char *doc = "{\"server\":\"a:1\",\"servers\":[\"x.net\", \"y.org\"]}";
     char arr[8][JSN_STR_CAP];
     size_t cnt = 0;
@@ -513,6 +576,12 @@ static void test_json(void)
     const char *bad_group = "{\"servers\":{\"vatsim\": 3}}";
     CHECK(jsn_read_servers(bad_group, "servers", arr, 8, &cnt) && cnt == 0);
     CHECK(!jsn_read_servers("{\"servers\": 5}", "servers", arr, 8, &cnt));
+    const char *quoted_servers =
+        "{\"servers\":{\"private\":[\"one { two }\",\"two\\\"three\"]}}";
+    CHECK(jsn_read_servers(quoted_servers, "servers", arr, 8, &cnt)
+          && cnt == 2);
+    CHECK(strcmp(arr[0], "one { two }") == 0
+          && strcmp(arr[1], "two\"three") == 0);
 
     /* cfg_load 对 Python 全量 settings.json（dict 形态）的兼容回归 */
     {
@@ -524,6 +593,7 @@ static void test_json(void)
             "  \"server\": \"fsd.skeet.top\",\n"
             "  \"port\": 6809,\n"
             "  \"rating\": 3,\n"
+            "  \"type\": \"Legacy\",\n"
             "  \"servers\": {\"vatsim\":[\"one.net\"], \"legacy\":[\"two.net\"]}\n"
             "}";
         cfg_t c;
@@ -533,6 +603,7 @@ static void test_json(void)
         fclose(f);
         cfg_load(&c, "build\\py_settings.json");
         CHECK(strcmp(c.callsign, "CES2101") == 0);
+        CHECK(strcmp(c.type, "legacy") == 0);
         CHECK(c.nservers == 2 && strcmp(c.servers[0], "one.net") == 0
               && strcmp(c.servers[1], "two.net") == 0);
     }

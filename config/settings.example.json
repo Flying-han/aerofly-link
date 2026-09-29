@@ -2,20 +2,21 @@
   "callsign": "",
   "cid": "",
   "realname": "",
-  "server": "sweatbox.vatsim.net",
+  "server": "flight.skeet.top",
   "port": 6809,
   "model": "",
   "rating": 2,
-  "type": "vatsim",
+  "language": "zh-CN",
+  "theme": "dark",
+  "auth_mode": "fsd-jwt",
   "jwt_url": "https://api.skeet.top/api/fsd-jwt",
   "jwt_proxy": "",
   "jwt_proxy_bypass": "localhost;127.0.0.1;::1",
   "mock_lat": "",
   "mock_lon": "",
   "mock_alt": "",
+  "flight_rules": "IFR",
   "servers": [
-    "sweatbox.vatsim.net",
-    "fsd.vatsim.net",
-    "127.0.0.1:6809"
+    "flight.skeet.top:6809"
   ]
 }

@@ -1,7 +1,7 @@
 # Aerofly Link C 重写——架构与开发计划
 
 - 版本: 1.3（2026-09-29）
-- 状态: P0-P4 完成；本地 Docker FSD 0.6.2 的 VATSIM revision-100 多客户端 E2E 通过；产品 WinHTTP HTTPS 获取成功路径及公网互验仍未验证
+- 状态: P0-P4 完成；v0.3.1 GUI 以 Nuklear/Win32-GDI 重做（见 ADR 0010）；Windows 10+ 为目标，Linux/macOS 不作 v0.3.1 支持承诺。认证 WinHTTP HTTPS 成功路径及公网互验仍未验证
 - 决策依据: [ADR 0001](adr/0001-c-rewrite.md)（为何用 C）、[ADR 0005](adr/0005-performance-budget.md)（性能预算）
 - 行为基准: 历史 Python 实现（Git 历史）；当前协议事实来源为 C 实现与 C 测试
 
@@ -44,9 +44,10 @@ Python+Qt 技术栈决定，优化只能削掉地板之上的部分（1.1.0 已�
   CAPS/$CQ/$PI 应答行为。**只借鉴行为，不复制代码**（GPL 与本项目 LGPL-3.0 不兼容）。
 - **历史 Python 版（Git 历史）**：移植期行为参考；旧实现已从工作树移除，
   协议改动以 C 测试和当前实现为准。
-- **ASC FSD 后端（Go）**：互操作对象。新配置默认通过 FSD-JWT 使用 VATSIM
-  revision 100；legacy revision 9 保留为用户明确选择的兼容协议，详见后端
+- **ASC FSD 后端（Go）**：互操作对象。新配置使用 FSD-JWT/revision 100；legacy revision 9 保留为用户明确选择的兼容协议，详见后端
   `docs/compatibility/fsd-jwt.md`。
+
+说明：此处的 JWT/revision-100 描述 FSD 认证方言，不表示 Aerofly Link 获准连接 VATSIM 网络；v0.3.1 的 ASC 目标地址和 VATSIM 边界见 ADR 0009。
 
 ## 4. 目标架构
 

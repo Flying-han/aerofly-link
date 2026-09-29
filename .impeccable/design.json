@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T12:09:02Z",
+  "title": "Design System: Aerofly Link",
+  "extensions": {
+    "breakpoints": [
+      { "name": "compact-forms", "value": "850 logical px" },
+      { "name": "flight-plan-columns", "value": "900 logical px" },
+      { "name": "flight-deck-split", "value": "1050 logical px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Connection Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "One wide action connects to the selected community FSD server.",
+      "html": "<button class=\"ds-primary\">Connect to ASC Community</button>",
+      "css": ".ds-primary{background:#4ECFE1;color:#0A161D;border:1px solid #4ECFE1;border-radius:5px;padding:7px 10px;font:400 15px 'Segoe UI',sans-serif}.ds-primary:hover{background:#6FDEEB}.ds-primary:focus-visible{outline:2px solid #E8F0F4;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Control",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Used for server history, navigation, and secondary flight operations.",
+      "html": "<button class=\"ds-secondary\">Save this address</button>",
+      "css": ".ds-secondary{background:#1B2A36;color:#E8F0F4;border:1px solid #304350;border-radius:5px;padding:7px 10px;font:400 15px 'Segoe UI',sans-serif}.ds-secondary:hover{background:#2A3E4C}.ds-secondary:focus-visible{outline:2px solid #4ECFE1;outline-offset:2px}"
+    },
+    {
+      "name": "Text Entry",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A labeled field with a quiet surface and visible focus edge.",
+      "html": "<label class=\"ds-field\">Server address<input value=\"flight.skeet.top:6809\"></label>",
+      "css": ".ds-field{display:grid;gap:6px;color:#A4B5C0;font:400 12px 'Segoe UI',sans-serif}.ds-field input{background:#131E28;color:#E8F0F4;border:1px solid #304350;border-radius:4px;padding:6px 8px;font:400 15px 'Segoe UI',sans-serif}.ds-field input:focus{outline:2px solid #4ECFE1;outline-offset:1px}"
+    },
+    {
+      "name": "Selected Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "The active destination keeps its full text label and accent state.",
+      "html": "<nav><button class=\"ds-nav-active\">Flight deck</button></nav>",
+      "css": ".ds-nav-active{background:#1B2A36;color:#4ECFE1;border:1px solid #4ECFE1;border-radius:5px;padding:7px 10px;font:400 15px 'Segoe UI',sans-serif}"
+    },
+    {
+      "name": "Emergency Squawk Shortcut",
+      "kind": "button",
+      "refersTo": "button-alert",
+      "description": "7700 receives a distinct alert fill while retaining its numeric label.",
+      "html": "<button class=\"ds-emergency\">7700</button>",
+      "css": ".ds-emergency{background:#EE7077;color:#0A161D;border:1px solid #EE7077;border-radius:5px;padding:7px 10px;font:400 15px 'Segoe UI',sans-serif}.ds-emergency:focus-visible{outline:2px solid #E8F0F4;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Flight Operations Console",
+    "overview": "A desktop operations workspace for pilots to join a community FSD server, monitor the Aerofly bridge, and handle a flight plan, transponder, and messages. The deep flight context uses flat blue-charcoal surfaces, a cyan primary action, and text alongside every status color.\n\nThe connection path is explicit and the connected view separates aircraft state from flight-plan and messaging tasks. At compact widths, the two-column flight deck becomes a single scrollable column. Advanced endpoint and proxy settings stay behind an explicit disclosure.",
+    "keyCharacteristics": [
+      "Deep blue-charcoal default theme with a matching high-contrast light theme.",
+      "Segoe UI for labels and forms; Consolas only for the transponder measurement.",
+      "One-pixel borders and tonal surface changes; no decorative shadows.",
+      "Full-text navigation and connection actions across Simplified Chinese, Hong Kong Traditional Chinese, and American English."
+    ],
+    "rules": [
+      { "name": "Status-in-Words", "body": "State colors always appear with a readable label.", "section": "colors" },
+      { "name": "Server-Address Rule", "body": "Show community servers as complete host:port addresses.", "section": "components" }
+    ],
+    "dos": [
+      "Do show connection state, telemetry state, and transponder mode as text as well as color.",
+      "Do keep the primary connection action visually distinct from server-management controls.",
+      "Do keep form labels above fields and align paired columns to a common baseline."
+    ],
+    "donts": [
+      "Don't expose internal ECO or TYPE abbreviations as user-facing labels.",
+      "Don't seed Sweatbox as a normal community-flight server.",
+      "Don't make a VATSIM endpoint look like approval to connect with this client.",
+      "Don't use a glyph alone for delete, connection, or emergency actions."
+    ]
+  }
+}

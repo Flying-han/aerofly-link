@@ -52,28 +52,89 @@ static int parse_url(const char *url, char *host, size_t host_cap,
 {
     if (!url || strncmp(url, "https://", 8) != 0)
         return -1;
-    const char *p = url + 8;
-    const char *slash = strchr(p, '/');
-    const char *colon = strchr(p, ':');
-    if (!slash)
-        slash = p + strlen(p);
-    size_t hl = (colon && colon < slash) ? (size_t)(colon - p)
-                                         : (size_t)(slash - p);
-    if (hl == 0 || hl >= host_cap)
-        return -1;
-    memcpy(host, p, hl);
-    host[hl] = '\0';
-    *port = (colon && colon < slash) ? atoi(colon + 1) : 443;
-    if (*port <= 0 || *port > 65535)
-        return -1;
-    if (*slash == '\0') {
-        if (path_cap < 2)
+    const char *authority = url + 8;
+    const char *end = authority;
+    while (*end && *end != '/' && *end != '?' && *end != '#') {
+        unsigned char c = (unsigned char)*end;
+        if (c <= 0x20 || c >= 0x7f || c == '@' || c == '\\')
             return -1;
-        strcpy(path, "/");
+        ++end;
+    }
+    if (end == authority || *end == '#')
+        return -1;
+
+    const char *colon = NULL;
+    for (const char *p = authority; p < end; ++p) {
+        if (*p == ':') {
+            if (colon)
+                return -1; /* IPv6 literals are not accepted in this setting. */
+            colon = p;
+        }
+    }
+    size_t host_len = (size_t)((colon ? colon : end) - authority);
+    if (host_len == 0 || host_len >= host_cap)
+        return -1;
+
+    /* Accept ASCII DNS names and IPv4 literals; reject userinfo and URL syntax. */
+    size_t label_len = 0;
+    bool previous_hyphen = false;
+    for (size_t i = 0; i < host_len; ++i) {
+        unsigned char c = (unsigned char)authority[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+            || (c >= '0' && c <= '9')) {
+            if (++label_len > 63)
+                return -1;
+            previous_hyphen = false;
+        } else if (c == '-') {
+            if (label_len == 0 || ++label_len > 63)
+                return -1;
+            previous_hyphen = true;
+        } else if (c == '.') {
+            if (label_len == 0 || previous_hyphen)
+                return -1;
+            label_len = 0;
+            previous_hyphen = false;
+        } else {
+            return -1;
+        }
+    }
+    if (label_len == 0 || previous_hyphen)
+        return -1;
+
+    int parsed_port = 443;
+    if (colon) {
+        if (colon + 1 == end)
+            return -1;
+        parsed_port = 0;
+        for (const char *p = colon + 1; p < end; ++p) {
+            if (*p < '0' || *p > '9')
+                return -1;
+            parsed_port = parsed_port * 10 + (*p - '0');
+            if (parsed_port > 65535)
+                return -1;
+        }
+        if (parsed_port == 0)
+            return -1;
+    }
+
+    memcpy(host, authority, host_len);
+    host[host_len] = '\0';
+    *port = parsed_port;
+
+    const char *path_start = end;
+    size_t path_len = strlen(path_start);
+    if (strchr(path_start, '#') || path_len + 2 >= path_cap)
+        return -1;
+    for (const unsigned char *p = (const unsigned char *)path_start; *p; ++p)
+        if (*p < 0x20 || *p == 0x7f)
+            return -1;
+    if (*path_start == '?') {
+        path[0] = '/';
+        memcpy(path + 1, path_start, path_len + 1);
+    } else if (*path_start == '/') {
+        memcpy(path, path_start, path_len + 1);
     } else {
-        if (strlen(slash) >= path_cap)
-            return -1;
-        strcpy(path, slash);
+        strcpy(path, "/");
     }
     return 0;
 }
@@ -154,6 +215,16 @@ int http_post_json(const char *url, const char *proxy,
                                  WINHTTP_FLAG_SECURE);
         if (!req) {
             if (err_cap) _snprintf(err, err_cap - 1, "请求构造失败");
+            break;
+        }
+
+        /* Credentials must stay on the configured HTTPS endpoint. */
+        DWORD redirect_policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+        if (!WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY,
+                              &redirect_policy, sizeof(redirect_policy))) {
+            if (err_cap)
+                _snprintf(err, err_cap - 1,
+                          "无法禁用 JWT 请求重定向（WinHTTP）");
             break;
         }
 

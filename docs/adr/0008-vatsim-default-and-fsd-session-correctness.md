@@ -20,3 +20,9 @@
 - VATSIM/FSD-JWT 成为新用户默认，社区私服可将 `jwt_url` 指向自己的 HTTPS 兼容端点，并为令牌请求配置独立代理；服务器地址、端口、模式和服务列表仍由用户控制。仅允许 legacy 的服务器仍可显式选择 legacy。
 - 单测必须覆盖默认 VATSIM 配置、自定义 JWT URL/代理/bypass、settings round-trip、密码 trace 脱敏、缓存位置保活和 STBY 缓存状态。
 - 本地 FSD 0.6.2 Docker E2E 覆盖 revision-100 登录、双客户端业务路径和 Win32 GUI；由于本地 FSD HTTP JWT fixture 没有受信任 HTTPS 证书，`jwt_acquire()` 的产品 WinHTTP 成功路径仍单独标为未验证。详见 E2E 报告。
+
+## 2026-09-29 语义澄清
+
+本 ADR 中的 `vatsim` 是历史内部字段名，实际表示 **FSD-JWT/revision 100 认证方言**；它不能推导出目标服务器属于 VATSIM，也不能推导出 Aerofly Link 获准连接 VATSIM。v0.3.1 默认目标改为 ASC `flight.skeet.top:6809`，用户配置文件使用 `auth_mode: "fsd-jwt"`。
+
+VATSIM 规则要求客户端获批。Aerofly Link 当前不在公开获批清单中，因此 v0.3.1 只显示 `fsd.connect.vatsim.net:6809` 作为地址参考，并拒绝从本程序直连 `*.vatsim.net`。VATSIM 数据服务将普通网络服务器和 Sweatbox 列表分开发布：<https://status.vatsim.net/status.json>。
