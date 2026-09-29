@@ -1,12 +1,8 @@
 # Third-party notices
 
-## Leaflet
+## AeroflyBridge.dll
 
-The bundled `assets/leaflet.js` and `assets/leaflet.css` are Leaflet 1.9.4 and retain the upstream copyright notice. Leaflet is distributed under its BSD 2-Clause license.
-
-## Map icons
-
-The bundled map marker and layer images are Leaflet assets and are covered by the same upstream attribution requirements.
+The shipped bridge DLL (`AeroflyBridge.dll`) is built from the external open-source project [jlgabriel/Aerofly-FS4-Bridge](https://github.com/jlgabriel/Aerofly-FS4-Bridge) and remains under its original license.
 
 ## Aerofly FS 4
 

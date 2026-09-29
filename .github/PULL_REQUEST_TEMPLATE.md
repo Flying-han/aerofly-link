@@ -4,8 +4,8 @@
 
 ## Testing
 
-- [ ] `python -m compileall main.py main_window.py core ui`
-- [ ] Relevant Mock DLL or unit tests
+- [ ] `client-c\build.cmd` (zig cc) for changes to the C client
+- [ ] Relevant C unit tests and Mock FSD/bridge checks
 
 ## Checklist
 
