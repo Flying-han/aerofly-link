@@ -10,7 +10,7 @@ labels: bug
 ## Environment
 
 - Windows version:
-- Python version:
+- Zig/compiler version (if built from source):
 - Aerofly FS 4 version:
 - Aerofly Link version/commit:
 

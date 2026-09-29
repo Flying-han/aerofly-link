@@ -18,10 +18,12 @@
 int http_json_escape(const char *in, char *out, size_t cap);
 
 /* 同步 HTTPS POST JSON（阻塞，超时由 timeout_ms 约束；GUI 登录期一次）。
- * url 形如 https://host[:port]/path。
+ * url 形如 https://host[:port]/path；proxy 为空用 Windows 自动代理设置，
+ * 非空时传 WinHTTP proxy list（如 http=127.0.0.1:10808;https=127.0.0.1:10808）。
  * 成功（HTTP 200 且响应含 token）返回 0，token 填入 out；
  * 失败返回 -1，err 填人类可读原因。 */
-int http_post_json(const char *url, const char *body,
+int http_post_json(const char *url, const char *proxy, const char *proxy_bypass,
+                   const char *body,
                    char *resp, size_t resp_cap,
                    char *out_token, size_t token_cap,
                    char *err, size_t err_cap,
@@ -29,7 +31,8 @@ int http_post_json(const char *url, const char *body,
 
 /* FSD-JWT 获取组合步骤：转义 → POST → 提取 token。
  * 成功 0；失败 -1 且 err 含原因（用于断线文案）。 */
-int jwt_acquire(const char *url, const char *cid, const char *password,
+int jwt_acquire(const char *url, const char *proxy, const char *proxy_bypass,
+                const char *cid, const char *password,
                 char *token, size_t token_cap,
                 char *err, size_t err_cap);
 

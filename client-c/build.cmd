@@ -1,7 +1,8 @@
 @echo off
+rem Windows CMD requires CRLF in this script; enforced by .gitattributes.
 rem ============================================================
 rem Aerofly Link C client - build script (zig cc, explicit cmds)
-rem Prerequisite: zig via vfox (vfox add zig / vfox use zig)
+rem Prerequisite: zig is already available on PATH from the existing vfox SDK.
 rem Outputs:
 rem   build/libfsd.a            core protocol + app library
 rem   build/test_protocol.exe   protocol unit tests (P0)
@@ -14,7 +15,7 @@ cd /d "%~dp0"
 
 where zig >nul 2>&1
 if errorlevel 1 (
-    echo [error] zig not found in PATH. Install via: vfox add zig ^&^& vfox use zig
+    echo [error] zig not found in PATH. Activate the existing vfox-managed Zig SDK.
     exit /b 1
 )
 
@@ -42,6 +43,7 @@ zig cc %CFLAGS% -c src/app.c             -o %BUILD%/app.obj             || exit 
 zig cc %CFLAGS% -c src/http.c            -o %BUILD%/http.obj            || exit /b 1
 
 echo [2/6] archiving libfsd.a...
+if exist "%BUILD%\libfsd.a" del /q "%BUILD%\libfsd.a"
 zig ar rcs %BUILD%/libfsd.a %BUILD%/protocol.obj %BUILD%/message.obj %BUILD%/frame.obj %BUILD%/json.obj %BUILD%/config.obj %BUILD%/net.obj %BUILD%/session.obj %BUILD%/bridge.obj %BUILD%/transponder.obj %BUILD%/mock.obj %BUILD%/app.obj %BUILD%/http.obj || exit /b 1
 
 echo [3/6] building protocol tests...

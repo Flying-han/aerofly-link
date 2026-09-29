@@ -1,6 +1,6 @@
 # Aerofly Link
 
-> Open-source FSD connectivity client for Aerofly FS 4 — 原生 C 单文件实现。
+> Aerofly Link 0.3.0 — Open-source FSD connectivity client for Aerofly FS 4, implemented in native C.
 
 Aerofly Link is an unofficial community project. It is not affiliated with or endorsed by IPACS.
 
@@ -18,23 +18,27 @@ Aerofly FS 4 第三方联机客户端 — 桥接 FSD 协议服务器（VATSIM / 
 - **飞行计划** — 握手自动发送最小 `$FP`，工作区内可提交完整飞行计划
 - **模拟 DLL 模式** — 无需启动 AFS4 即可测试联机功能（GUI 开关 / CLI `--mock`）
 
+默认认证模式为 `vatsim`（FSD-JWT/revision 100）。服务器地址、端口、服务器列表、
+`jwt_url` 和可选的 `jwt_proxy` / `jwt_proxy_bypass` 均可在
+`%APPDATA%\AeroflyLink\settings.json` 中自定义。空 `jwt_proxy` 使用 Windows 自动代理；
+需要为 JWT 请求单独指定代理时，可配置 WinHTTP proxy list（例如
+`http=127.0.0.1:10808;https=127.0.0.1:10808`）。兼容旧服务时可显式选择 `legacy`
+（revision 9）。客户端不依赖固定的 ASC API 地址。
+
 ## 技术栈
 
 | 组件 | 技术 |
 |------|------|
-| 客户端 | C11 + Win32（单文件 ~200KB，静态 CRT，无运行时依赖） |
+| 客户端 | C11 + Win32（GUI 与 CLI 原生程序，静态 CRT） |
 | 构建 | zig cc（`client-c/build.cmd`） |
 | 安装器 | Inno Setup 6 |
 | AF4 桥接 DLL | [外部开源 AeroflyBridge.dll](https://github.com/jlgabriel/Aerofly-FS4-Bridge)（见 ADR 0002） |
-
-Python 版（PyQt6，127MB 级分发）已在 C 版对齐验收后移除（ADR 0007），
-行为基准与历史实现见 git 历史。
 
 ## 项目结构
 
 ```
 aerofly-link/
-├── client-c/                       # C 客户端（唯一实现）
+├── client-c/                       # 当前唯一客户端实现
 │   ├── build.cmd                   # 一键构建 + 测试（zig cc）
 │   ├── VERSION                     # 版本号单一来源
 │   ├── aeroflylink.exe.manifest    # comctl v6 + PerMonitorV2 DPI
@@ -43,7 +47,7 @@ aerofly-link/
 │   ├── tests/                      # C 断言测试 + 无头客户端入口
 │   └── setup/                      # Inno Setup 安装包脚本
 ├── docs/                           # 文档（ADR、重写计划、发布清单）
-├── tools/                          # 开发工具（Python：Mock FSD / GUI 冒烟）
+├── tools/                          # 开发期 Mock FSD 与 GUI 冒烟工具（Python）
 └── config/                         # 配置模板
 ```
 
@@ -52,7 +56,7 @@ aerofly-link/
 ### 从源码构建
 
 ```cmd
-:: 安装 zig（vfox 或 ziglang.org），然后：
+:: 使用 vfox 激活本机 Zig 工具链（zig cc），然后：
 cd client-c
 build.cmd
 :: 产物: build\aeroflylink.exe（GUI）、build\aeroflylink-cli.exe（无头）
@@ -97,7 +101,8 @@ aeroflylink-cli.exe --config <settings.json> --password PW [--mock]
   - PBH 使用 32-bit 位打包（与 Swift `pbh.h` 一致）
   - 应答机 mode 字母：N=ALT, S=STBY, Y=IDENT
 - **认证**：`#AP<callsign>:SERVER:<cid>:<password>:<rating>:<revision>:<simtype>:<realname>`
-  - legacy（revision 9）与 ASC FSD 后端 0.5.3 互验通过；VATSIM FSD-JWT 未实现
+  - 默认 `vatsim` 模式通过 HTTPS 获取 FSD-JWT 并使用 revision 100；`legacy` revision 9
+    仅供兼容服务器显式启用。线上互操作结果以 [发布清单](docs/RELEASE.md) 的实测矩阵为准。
 - **飞行计划**：握手发送最小 `$FP` 纳入广播列表；工作区可提交完整 17 字段 `$FP`
 - **兼容性**：`$CQ:CAPS` 必答、`$PI`→`$PO`、`$ZC`→空 `$ZR`、90s 读超时、
   `#AP`/`@` 位置进 traffic 表、`#DP` 移除
@@ -112,6 +117,7 @@ aeroflylink-cli.exe --config <settings.json> --password PW [--mock]
 
 - [docs/C_REWRITE_PLAN.md](docs/C_REWRITE_PLAN.md) — C 实现架构与开发计划
 - [docs/RELEASE.md](docs/RELEASE.md) — 发布清单
+- [docs/testing/e2e-fsd-client.md](docs/testing/e2e-fsd-client.md) — 本地 FSD Docker E2E 规范与验证边界
 - [docs/adr/](docs/adr/) — 架构决策记录（为何用 C、外部 DLL、凭据处理、Win32 UI 等）
 
 ## License

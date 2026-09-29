@@ -3,6 +3,12 @@
 C11 全量重写的客户端（决策与路线见 [docs/adr/0001-c-rewrite.md](../docs/adr/0001-c-rewrite.md)
 与 [docs/C_REWRITE_PLAN.md](../docs/C_REWRITE_PLAN.md)）。
 P0 协议层、P1 传输/桥接、P2 无头客户端、P3 Win32 GUI 均已落地。
+应用版本号由 `VERSION` 单一管理；当前版本为 `0.3.0`。
+新配置默认使用 VATSIM FSD-JWT/revision 100；`jwt_url`、`jwt_proxy`、
+`jwt_proxy_bypass`、服务地址和端口都可通过 `settings.json` 自定义。`jwt_proxy` 留空时
+使用 Windows 自动代理；也可仅为 JWT 请求设置 WinHTTP proxy list
+（如 `http=127.0.0.1:10808;https=127.0.0.1:10808`）。legacy/revision 9 保留为显式兼容模式。
+本地 Docker FSD E2E 规范与证据见 [docs/testing/e2e-fsd-client.md](../docs/testing/e2e-fsd-client.md)。
 
 ## 布局
 
@@ -22,8 +28,8 @@ client-c/
 │   └── app.h         # 应用编排（1Hz 上报/同步检查/附近飞机）
 ├── src/              # 对应实现 + gui.c（Win32 界面）
 ├── tests/
-│   ├── test_main.c   # 协议层 128 项断言（与 tests/test_fsd_*.py 数值对齐）
-│   ├── test_p2.c     # 会话握手/桥接契约/配置 60 项断言
+│   ├── test_main.c   # 协议层断言
+│   ├── test_p2.c     # 会话握手/桥接契约/配置断言
 │   └── cli_main.c    # 无头客户端源码
 └── build.cmd         # zig cc 显式构建脚本
 ```
@@ -40,20 +46,6 @@ build.cmd
 - `aeroflylink-cli.exe` —— 无头客户端（参数见 `--help`，支持 `--mock`）
 - `test_protocol.exe` / `test_p2.exe` —— 测试（构建时自动运行）
 
-## 与 Python 版的对应
-
-| 功能 | Python | C |
-| --- | --- | --- |
-| FSD 登录（legacy rev9） | fsd_client.connect | session 握手状态机 |
-| 1Hz 位置上报 + 零坐标防护 | main_window 定时器 | app.position_report |
-| keepalive（缓存位置复用） | fsd_client | sess_tick |
-| 应答机双轨制 | transponder_controller | transponder + app |
-| 飞行计划（FAA/ICAO 格式） | send_flight_plan | sess_send_flightplan |
-| 文本通讯（@目标 消息） | send_text_message | app_send_chat |
-| 内嵌模拟 DLL | core/mock_server.py | mock.c（同算法心形航线） |
-| 配置持久化（无密码） | main_window._save_settings | config.c |
-| GUI | PyQt6（127MB 级分发） | Win32（单文件 ~200KB） |
-
 ## 约定
 
 - 错误处理：返回码（0 成功 / -1 参数或截断 / -2 协议语义错误），无异常。
@@ -64,7 +56,6 @@ build.cmd
 ## 状态
 
 - ✅ P0 协议层 / ✅ P1 传输与桥接 / ✅ P2 无头客户端 / ✅ P3 Win32 GUI
-- ✅ 与 Python 版行为差距补齐（读超时/`#AP` traffic/`$FP` 归一化/配置互读/
-  协议跟踪/FP 面板/日志着色/服务器管理，2026-09-20）
-- ⬜ 与 ASC FSD 线上环境互验（P2 验收收尾，见 docs/RELEASE.md 通过矩阵）
+- ✅ legacy 与 FSD-JWT（`vatsim`）认证路径已实现
+- ⬜ ASC/VATSIM 线上环境互验（见 docs/RELEASE.md 通过矩阵）
 - ✅ 安装器切换到 C 版单文件分发（P4，`client-c/setup/`）

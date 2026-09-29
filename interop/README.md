@@ -1,6 +1,6 @@
 # P2 线上互验操作单（对 ASC 生产服务器）
 
-> 本目录不入库（凭据安全）。完成后可整目录删除。
+> 真实互验配置位于 `.gitignore` 屏蔽的 `asc_live.json`；模板和本操作单纳入版本控制。不要把密码、JWT 或完整认证 trace 加入 issue/PR。
 
 ## 准备
 
@@ -12,15 +12,20 @@
    ```
 
    需要改的字段：`callsign`（测试呼号）、`cid`、`server`（ASC 服务器地址）、
-   `port`（一般 6809）。
+   `port`（一般 6809）、`jwt_url`（兼容的 FSD-JWT HTTPS 端点）。
+
+   `jwt_proxy` 可单独为令牌请求设置 WinHTTP HTTP proxy list，例：
+   `http=127.0.0.1:10808;https=127.0.0.1:10808`；留空时使用 Windows 自动代理。
+   此字段要求 HTTP 代理协议；若本机代理客户端同时提供 SOCKS 和 HTTP 监听端口，
+   应填 HTTP 监听端口。`jwt_proxy_bypass` 配置命名代理下直连的主机列表。
 
    **`type` 必须与你要用的连接模式一致**：
    - `"type": "vatsim"`（VATSIM/swift 模式，**推荐**）——走 FSD-JWT 流程：
      `$ID` → `POST {jwt_url}` 换短时效令牌 → `#AP` rev100。`jwt_url` 默认
-     `https://api.skeet.top/api/fsd-jwt`，私有部署可在配置里覆盖。
-   - `"type": "legacy"`（revision 9 明文密码 + 服务端 bcrypt）——要求账号
-     允许明文密码路径。
-   两种模式服务端都支持；大小写不敏感。
+     `https://api.skeet.top/api/fsd-jwt`，社区或私有部署可在配置里覆盖。
+   - `"type": "legacy"`（revision 9 明文密码 + 服务端 bcrypt）——仅用于明确允许
+     legacy 登录的兼容服务器。
+   此 E2E 的目标服务器使用 VATSIM JWT/revision 100；模式值大小写不敏感。
 
 ## 运行
 
@@ -40,7 +45,7 @@ client-c\build\aeroflylink-cli.exe --config interop\asc_live.json --password 你
 | 2 | 无 `#ER` 拒绝 | TRACE 中无 `<<< #ER` |
 | 3 | 1Hz 位置上报、服务端可见在线 | 每 1s 一条 `>>> @N:呼号:...`；服务器/雷达出现该呼号 |
 | 4 | 飞行计划被接受 | 握手即有 `>>> $FP...NOFP`；输入 `/fp` 后无 `#ER` 回显 |
-| 5 | 空闲 >10min 保持在线 | 放置 10 分钟（vatsim 模式 keepalive 为缓存位置 `@` 重发；legacy 为 `#TM...:@`），不掉线 |
+| 5 | 空闲 >10min 保持在线 | 放置 10 分钟；两种认证模式都以缓存位置 `@` 保活，不发往 `SERVER` 的 `#TM` |
 | 6 | CAPS 应答 | 若服务器发 `<<< $CQ...:CAPS`，随后必有 `>>> $CR...CAPS:...` |
 | 7 | PING | `<<< $PI` → `>>> $PO`；`<<< $ZC` → `>>> $ZR` |
 | 8 | 收服务器文本 | `<<< #TM...` 在日志显示 |

@@ -126,6 +126,12 @@ void app_init(app_t *a, const cfg_t *cfg)
     a->sess.jwt_url[sizeof(a->sess.jwt_url) - 1] = '\0';
     if (!a->sess.jwt_url[0])
         strcpy(a->sess.jwt_url, "https://api.skeet.top/api/fsd-jwt");
+    strncpy(a->sess.jwt_proxy, cfg->jwt_proxy,
+            sizeof(a->sess.jwt_proxy) - 1);
+    a->sess.jwt_proxy[sizeof(a->sess.jwt_proxy) - 1] = '\0';
+    strncpy(a->sess.jwt_proxy_bypass, cfg->jwt_proxy_bypass,
+            sizeof(a->sess.jwt_proxy_bypass) - 1);
+    a->sess.jwt_proxy_bypass[sizeof(a->sess.jwt_proxy_bypass) - 1] = '\0';
     /* CLI 路径：密码可从 cfg（内存中）带入；GUI 路径用 app_set_password */
     strncpy(a->sess.password, cfg->password, sizeof(a->sess.password) - 1);
     a->sess.password[sizeof(a->sess.password) - 1] = '\0';
@@ -228,6 +234,7 @@ int app_send_chat(app_t *a, const char *text)
 void app_set_xpdr_mode(app_t *a, bool alt)
 {
     const char *warn = xpdr_set_mode(&a->xpdr, alt, dll_write_mode_cb, a);
+    sess_cache_xpdr(&a->sess, xpdr_ap_code(&a->xpdr), xpdr_letter(&a->xpdr));
     if (warn && a->on_warning)
         a->on_warning(a->ud, warn);
     if (a->on_xpdr)
@@ -237,6 +244,7 @@ void app_set_xpdr_mode(app_t *a, bool alt)
 void app_set_xpdr_code(app_t *a, const char *code)
 {
     const char *warn = xpdr_set_code(&a->xpdr, code, dll_write_code_cb, a);
+    sess_cache_xpdr(&a->sess, xpdr_ap_code(&a->xpdr), xpdr_letter(&a->xpdr));
     if (warn && a->on_warning)
         a->on_warning(a->ud, warn);
     if (a->on_xpdr)
@@ -246,6 +254,7 @@ void app_set_xpdr_code(app_t *a, const char *code)
 void app_ident(app_t *a)
 {
     xpdr_ident(&a->xpdr, net_now(), IDENT_DURATION);
+    sess_cache_xpdr(&a->sess, xpdr_ap_code(&a->xpdr), xpdr_letter(&a->xpdr));
     if (a->on_xpdr)
         a->on_xpdr(a->ud);
 }
@@ -371,8 +380,11 @@ void app_poll(app_t *a, int timeout_ms)
     mocksrv_tick(&a->mock, now);
     position_report(a, now);
     sync_check(a, now);
-    if (xpdr_tick(&a->xpdr, now) && a->on_xpdr)
-        a->on_xpdr(a->ud);
+    if (xpdr_tick(&a->xpdr, now)) {
+        sess_cache_xpdr(&a->sess, xpdr_ap_code(&a->xpdr), xpdr_letter(&a->xpdr));
+        if (a->on_xpdr)
+            a->on_xpdr(a->ud);
+    }
 }
 
 /* ── 状态摘要 ── */

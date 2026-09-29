@@ -28,6 +28,10 @@
 
 gui_t G;
 
+#ifdef AEROFLYLINK_E2E_GUI
+void gui_e2e_prepopulate(void);
+#endif
+
 /* ── 缩放与文本 ── */
 int SC(int v) { return v * G.dpi / 96; }
 
@@ -829,6 +833,9 @@ int gui_main(HINSTANCE hInst, int show)
     sync_pages();          /* 初始隐藏工作区，仅显示连接页 */
     ShowWindow(wnd, show);
     UpdateWindow(wnd);
+#ifdef AEROFLYLINK_E2E_GUI
+    gui_e2e_prepopulate(); /* Populate after page visibility is finalized. */
+#endif
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {

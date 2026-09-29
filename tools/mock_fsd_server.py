@@ -15,7 +15,13 @@ Ctrl+C 退出。
 import argparse
 import asyncio
 import datetime
+import sys
 import threading
+
+# Windows console code pages such as CP1252 cannot print the Chinese status
+# lines used by this development fixture. Keep terminal and file output UTF-8.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 clients = set()
 lock = threading.Lock()

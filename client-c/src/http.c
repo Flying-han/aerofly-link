@@ -3,6 +3,7 @@
 #include "link/json.h"
 
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -77,7 +78,21 @@ static int parse_url(const char *url, char *host, size_t host_cap,
     return 0;
 }
 
-int http_post_json(const char *url, const char *body,
+static int proxy_to_wide(const char *src, wchar_t *dst, size_t dst_cap)
+{
+    if (!src || !src[0]) {
+        if (dst_cap)
+            dst[0] = L'\0';
+        return 0;
+    }
+    if (dst_cap > INT_MAX)
+        return -1;
+    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, src, -1,
+                               dst, (int)dst_cap) > 0 ? 0 : -1;
+}
+
+int http_post_json(const char *url, const char *proxy,
+                   const char *proxy_bypass, const char *body,
                    char *resp, size_t resp_cap,
                    char *out_token, size_t token_cap,
                    char *err, size_t err_cap,
@@ -93,11 +108,29 @@ int http_post_json(const char *url, const char *body,
         return -1;
     }
 
+    wchar_t wproxy[512], wbypass[512];
+    DWORD access_type = WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY;
+    LPCWSTR proxy_name = WINHTTP_NO_PROXY_NAME;
+    LPCWSTR proxy_bypass_name = WINHTTP_NO_PROXY_BYPASS;
+    if (proxy && proxy[0]) {
+        if (proxy_to_wide(proxy, wproxy, sizeof(wproxy) / sizeof(wproxy[0])) != 0
+            || proxy_to_wide(proxy_bypass, wbypass,
+                             sizeof(wbypass) / sizeof(wbypass[0])) != 0) {
+            if (err_cap)
+                _snprintf(err, err_cap - 1, "JWT proxy 配置非法或过长");
+            return -1;
+        }
+        access_type = WINHTTP_ACCESS_TYPE_NAMED_PROXY;
+        proxy_name = wproxy;
+        proxy_bypass_name = (wbypass[0] != L'\0')
+                          ? wbypass : WINHTTP_NO_PROXY_BYPASS;
+    }
+
     int ret = -1;
     HINTERNET ses = NULL, conn = NULL, req = NULL;
     do {
-        ses = WinHttpOpen(L"AeroflyLink", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                          WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        ses = WinHttpOpen(L"AeroflyLink", access_type,
+                          proxy_name, proxy_bypass_name, 0);
         if (!ses) {
             if (err_cap) _snprintf(err, err_cap - 1, "WinHTTP 初始化失败");
             break;
@@ -184,7 +217,8 @@ int http_post_json(const char *url, const char *body,
     return ret;
 }
 
-int jwt_acquire(const char *url, const char *cid, const char *password,
+int jwt_acquire(const char *url, const char *proxy, const char *proxy_bypass,
+                const char *cid, const char *password,
                 char *token, size_t token_cap,
                 char *err, size_t err_cap)
 {
@@ -199,6 +233,6 @@ int jwt_acquire(const char *url, const char *cid, const char *password,
     body[sizeof(body) - 1] = '\0';
 
     char resp[2048];
-    return http_post_json(url, body, resp, sizeof(resp),
+    return http_post_json(url, proxy, proxy_bypass, body, resp, sizeof(resp),
                           token, token_cap, err, err_cap, 10000);
 }

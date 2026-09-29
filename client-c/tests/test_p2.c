@@ -136,6 +136,16 @@ static void test_session_handshake(void)
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
     /* 飞行员 #AP rating 位固定 1（VATSIM/ASC 服务端要求，与配置 rating 无关） */
     CHECK(strcmp(line, "#APTST123:SERVER:1111111:pw:1:9:0:Tester") == 0);
+    {
+        bool auth_trace_redacted = false;
+        const char *want = ">>> #APTST123:SERVER:1111111:[REDACTED]:1:9:0:Tester";
+        for (size_t i = 0; i < g_n_trace && i < 64; i++) {
+            if (strcmp(g_trace[i], want) == 0)
+                auth_trace_redacted = true;
+            CHECK(strstr(g_trace[i], ":pw:") == NULL);
+        }
+        CHECK(auth_trace_redacted);
+    }
 
     /* 认证通过 */
     send(cli, "#TM authenticated\r\n", 19, 0);
@@ -143,9 +153,7 @@ static void test_session_handshake(void)
     sess_on_readable(&s);
     CHECK(g_state == SESS_ONLINE);
 
-    /* 在线后三连发：#SB 声明 / 最小 $FP / 初始 @ */
-    CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
-    CHECK(strcmp(line, "#SBTST123:SERVER") == 0);
+    /* 上线后先发最小 $FP，再发初始位置；不能发送无效的两字段 #SB。 */
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
     g_checks++;
     if (strcmp(line,
@@ -204,10 +212,12 @@ static void test_session_handshake(void)
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
     CHECK(strcmp(line, "#TMTST123:ZGGG_TWR:请求放行") == 0);
 
-    /* keepalive：legacy dialect 用 #TM 空跳（与 Python keepalive_loop 一致） */
+    /* keepalive：FSD 用缓存位置；STBY 状态随保活上报，不发无效 #TM...:SERVER。 */
+    sess_cache_xpdr(&s, "0000", 'S');
     sess_tick(&s, net_now() + 31.0);
     CHECK(sock_read_line(cli, line, sizeof(line)) == 0);
-    CHECK(strcmp(line, "#TMTST123:SERVER:@") == 0);
+    const char *stby_keepalive = "@S:TST123:0000:2:31.20000:121.90000:11000:250:";
+    CHECK(strncmp(line, stby_keepalive, strlen(stby_keepalive)) == 0);
 
     /* G1 读超时：60s（<90）仍在线；95s 无下行判死（Python 同文案） */
     sess_tick(&s, net_now() + 60.0);
@@ -307,11 +317,29 @@ static void test_jwt_helpers(void)
     {
         cfg_t c;
         cfg_defaults(&c);
-        strcpy(c.type, "VATSIM");
+        CHECK(strcmp(c.type, "vatsim") == 0);
         app_t a;
         app_init(&a, &c);
         CHECK(a.sess.vatsim == true);
+        strcpy(c.type, "VATSIM");
+        app_init(&a, &c);
+        CHECK(a.sess.vatsim == true);
         CHECK(strcmp(a.sess.jwt_url, "https://api.skeet.top/api/fsd-jwt") == 0);
+        CHECK(c.jwt_proxy[0] == '\0');
+        CHECK(strcmp(c.jwt_proxy_bypass, "localhost;127.0.0.1;::1") == 0);
+        CHECK(strcmp(a.sess.jwt_proxy_bypass,
+                     "localhost;127.0.0.1;::1") == 0);
+        strcpy(c.jwt_url, "https://community-fsd.example.invalid/api/fsd-jwt");
+        strcpy(c.jwt_proxy, "http=127.0.0.1:10808;https=127.0.0.1:10808");
+        strcpy(c.jwt_proxy_bypass, "localhost;127.0.0.1;::1;*.community.invalid");
+        app_init(&a, &c);
+        CHECK(a.sess.vatsim == true);
+        CHECK(strcmp(a.sess.jwt_url,
+                     "https://community-fsd.example.invalid/api/fsd-jwt") == 0);
+        CHECK(strcmp(a.sess.jwt_proxy,
+                     "http=127.0.0.1:10808;https=127.0.0.1:10808") == 0);
+        CHECK(strcmp(a.sess.jwt_proxy_bypass,
+                     "localhost;127.0.0.1;::1;*.community.invalid") == 0);
         strcpy(c.type, "legacy");
         app_init(&a, &c);
         CHECK(a.sess.vatsim == false);
@@ -403,6 +431,9 @@ static void test_config(void)
     strcpy(c.cid, "1234567");
     strcpy(c.password, "SECRET");      /* 绝不能落盘 */
     strcpy(c.server, "fsd.skeet.top");
+    strcpy(c.jwt_url, "https://community-fsd.example.invalid/api/fsd-jwt");
+    strcpy(c.jwt_proxy, "http=127.0.0.1:10808;https=127.0.0.1:10808");
+    strcpy(c.jwt_proxy_bypass, "localhost;127.0.0.1;::1");
     c.port = 6809;
     c.rating = 3;
     strcpy(c.mock_lat, "40.0801");
@@ -417,6 +448,9 @@ static void test_config(void)
     CHECK(cfg_load(&r, path) == 0);
     CHECK(strcmp(r.callsign, "CES2101") == 0);
     CHECK(strcmp(r.server, "fsd.skeet.top") == 0);
+    CHECK(strcmp(r.jwt_url, "https://community-fsd.example.invalid/api/fsd-jwt") == 0);
+    CHECK(strcmp(r.jwt_proxy, "http=127.0.0.1:10808;https=127.0.0.1:10808") == 0);
+    CHECK(strcmp(r.jwt_proxy_bypass, "localhost;127.0.0.1;::1") == 0);
     CHECK(r.port == 6809 && r.rating == 3);
     CHECK(strcmp(r.mock_lat, "40.0801") == 0);
     CHECK(strcmp(r.fp_route, "CDY G212 KR") == 0);

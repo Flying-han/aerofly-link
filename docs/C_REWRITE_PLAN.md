@@ -1,16 +1,16 @@
 # Aerofly Link C 重写——架构与开发计划
 
-- 版本: 1.2（2026-09-20）
-- 状态: P0-P4 全部落地（差距补齐 + 安装器/CI 切换完成）；仅余 P2 线上互验执行
+- 版本: 1.3（2026-09-29）
+- 状态: P0-P4 完成；本地 Docker FSD 0.6.2 的 VATSIM revision-100 多客户端 E2E 通过；产品 WinHTTP HTTPS 获取成功路径及公网互验仍未验证
 - 决策依据: [ADR 0001](adr/0001-c-rewrite.md)（为何用 C）、[ADR 0005](adr/0005-performance-budget.md)（性能预算）
-- 行为基准: Python 实现（`core/`），对齐完成后以本目录代码为准
+- 行为基准: 历史 Python 实现（Git 历史）；当前协议事实来源为 C 实现与 C 测试
 
 ## 0. TL;DR
 
 以 C11 从零实现 Aerofly Link 客户端，替换 Python/PyQt 版本，目标是：
 安装体积 **127MB → <5MB**、常驻内存 **~150MB → <20MB**、空闲 CPU **≈0**。
 路线：协议层 → 传输/桥接层 → 无头客户端（可被现有安装器分发验证）→ UI。
-编译器 zig cc，构建用显式命令，C 测试与 Python Mock 契约互验。
+编译器 zig cc，构建用显式命令，C 测试与开发期 Python Mock 服务互验。
 
 ## 1. 目标与非目标
 
@@ -18,16 +18,16 @@
 
 | # | 目标 | 验收 |
 | --- | --- | --- |
-| G1 | FSD 协议层与 Python 版行为逐条一致 | 同一组测试用例（`tests/test_fsd_*.py` 的 C 镜像）全绿 |
-| G2 | 与 ASC FSD 后端 0.5.3 完成真实互操作（legacy/revision 9） | 登录、位置上报、心跳、$TM 收发、被纳入广播 |
+| G1 | FSD 协议层与历史 Python 版行为逐条一致 | 历史协议用例在 C 测试中保留等价覆盖 |
+| G2 | 与 ASC FSD 0.6.2 完成 VATSIM 新协议互操作，并保留 revision 9 兼容 | 本地 FSD Docker E2E 验证 revision 100 登录、位置/飞行计划/文本/应答机/断开；revision 9 在兼容测试验证 |
 | G3 | 对接外部 AeroflyBridge.dll 扁平 JSON 契约（ADR 0002） | 12345 遥测解析 + 12346 命令往返 |
 | G4 | 资源预算达标（ADR 0005） | 空闲 0 网络 0 日志；内存 <20MB；无连接时 0 周期唤醒（退避除外） |
-| G5 | 单二进制分发，无运行时依赖（静态链接 CRT） | `AeroflyLink.exe` 独立运行于 Windows 10 x64 |
+| G5 | GUI/CLI 静态 CRT 发布，无客户端运行时依赖 | GUI 与 CLI 独立运行于 Windows 10 x64；安装包包含 GUI 和外部桥接 DLL |
 
 **非目标**
 
 - 不做防逆向混淆（见 ADR 0004 的立场：控制暴露面，不做表演性加固）。
-- 不实现 VATSIM FSD-JWT 认证（与 Python 版一致，见 RELEASE 已知限制）。
+- 不提供 Aerofly 模拟器内置地图或其他飞机模型注入。
 - 本计划不锁定 UI 技术选型（P3 时另立 ADR）。
 
 ## 2. 动机与量化
@@ -42,10 +42,11 @@ Python+Qt 技术栈决定，优化只能削掉地板之上的部分（1.1.0 已�
   `PilotDataUpdate::toTokens/fromTokens`（@ 包字段序与 5 位小数十进制坐标）、
   PBH 位布局（bit1=onGround, 2-11=heading, 12-21=bank, 22-31=pitch，pitch/bank 反转）、
   CAPS/$CQ/$PI 应答行为。**只借鉴行为，不复制代码**（GPL 与本项目 LGPL-3.0 不兼容）。
-- **Python 版（本仓库 core/）**：已与 ASC 后端互验过的行为基准，
-  C 层每个函数在移植时注明来源行号语义。
-- **ASC FSD 后端（Go）**：互操作对象。连接即发 `$DISERVER:...:challenge`，
-  legacy 登录走 revision 9 + bcrypt，详见后端 `docs/compatibility/fsd-jwt.md`。
+- **历史 Python 版（Git 历史）**：移植期行为参考；旧实现已从工作树移除，
+  协议改动以 C 测试和当前实现为准。
+- **ASC FSD 后端（Go）**：互操作对象。新配置默认通过 FSD-JWT 使用 VATSIM
+  revision 100；legacy revision 9 保留为用户明确选择的兼容协议，详见后端
+  `docs/compatibility/fsd-jwt.md`。
 
 ## 4. 目标架构
 
@@ -98,15 +99,15 @@ Python+Qt 技术栈决定，优化只能削掉地板之上的部分（1.1.0 已�
 
 | 阶段 | 内容 | 验收标准 | 状态 |
 | --- | --- | --- | --- |
-| **P0 协议层骨架** | core 协议层 + 128 项 C 断言 + build.cmd | 测试全绿；与 pytest 用例数值一致 | ✅ 完成 |
+| **P0 协议层骨架** | core 协议层 + C 断言 + build.cmd | C 测试通过；历史 Python 用例有等价覆盖 | ✅ 完成 |
 | **P1 传输与桥接** | session 状态机（问候/认证/keepalive/traffic）+ bridge（遥测映射/命令短连接/指数退避） | 回环 FSD 握手全流程测试；桥接↔Mock 契约测试 | ✅ 完成 |
-| **P2 无头客户端** | app 编排器 + `aeroflylink-cli.exe`（配置/控制台命令/优雅退出）+ tools/mock_fsd_server.py | **真实 E2E：CLI 对 Mock FSD 完成登录-$FP-1Hz 上报-pong 全链路**；线上 ASC 互验待做 | ✅ 完成（线上互验待办） |
-| **P3 UI** | 选型 Win32（纯 C、无依赖，见 ADR 0006）→ `aeroflylink.exe`（连接页/工作区/状态栏，功能对齐 Python 版） | 构建+冒烟截图+WM_CLOSE 优雅退出；暗色主题等视觉打磨列入 backlog | ✅ 完成 |
-| **P4 切换发布** | 安装器分发 C 版单文件；Python 版移除（决策见 ADR 0007）；仓库结构收敛 | RELEASE 流程更新；文档一致 | ✅ 完成（安装器/CI/文档已切换；Python 移除与合并随收尾 PR） |
+| **P2 无头客户端** | app 编排器 + `aeroflylink-cli.exe`；本地 FSD Docker E2E，见 `docs/testing/e2e-fsd-client.md` | VATSIM JWT/revision 100 登录、双客户端/计划/文本/位置/keepalive/错误和断开；公网互验独立记录 | ✅ 本地 E2E 完成；公网互验待做 |
+| **P3 UI** | 选型 Win32（纯 C、无依赖，见 ADR 0006）→ `aeroflylink.exe`（连接页/工作区/状态栏，功能对齐历史 Python 版） | 构建+冒烟截图+WM_CLOSE 优雅退出；暗色主题等视觉打磨列入 backlog | ✅ 完成 |
+| **P4 切换发布** | 安装器分发 C 版；移除 Python 客户端与仓库 C++ 脚手架（ADR 0007）；仓库结构收敛 | 发布流程、CI、文档和源码均只有 C 客户端；开发期 Mock/GUI 工具可保留 Python | ✅ 完成 |
 
 ## 7. 构建与工具链
 
-- 编译器：zig cc（vfox 管理：`vfox add zig` / `vfox use zig`）。
+- 编译器：zig cc（使用开发者已安装并由 vfox 激活的 Zig 工具链；构建脚本不安装或更新开发工具）。
   目标 `x86_64-windows-gnu`，静态链接 CRT（`-static`），无外部依赖。
 - 构建：`client-c/build.cmd`（显式命令，逐文件编译 → `zig ar` 出 `libfsd.a` → 测试）。
   不引入 CMake/Meson，直到 P2 出现多目标需求再评估（YAGNI）。
@@ -116,12 +117,13 @@ Python+Qt 技术栈决定，优化只能削掉地板之上的部分（1.1.0 已�
 
 1. **C 单元测试**：`client-c/tests/test_main.c`，极简断言宏，零依赖
    （不引 CHECK/Criterion，保持"clone 即可构建"）。
-2. **数值对齐**：`tests/test_fsd_protocol.py` 的每个用例在 C 侧有镜像
+2. **数值对齐**：历史 `tests/test_fsd_protocol.py` 的核心用例在 C 侧有镜像
    （PBH 90°→1024、packed 坐标往返、距离容差），保证 G1。
-3. **契约互验（P1）**：C 无头客户端 ↔ Python `core/mock_server.py`；
-   遥测解析结果与 `Telemetry.from_aerofly_bridge` 输出逐字段一致。
-4. **互操作（P2）**：接 ASC FSD 0.5.3（sweatbox/私有实例）完成登录-上报-心跳-
-   断开全流程，服务端日志无协议错误。
+3. **契约互验（P1）**：C 无头客户端 ↔ `tools/mock_fsd_server.py`；
+   AeroflyBridge 扁平 JSON 契约由 C 测试覆盖。
+4. **互操作（P2）**：从本地 ASC FSD 0.6.2 源码构建隔离 Docker 服务，使用
+   VATSIM revision 100 完成登录、位置、计划、文本、应答机与断开流程；另验
+   revision 9 兼容路径。公网 VATSIM、生产 ASC 和受信 HTTPS JWT 端点作为独立门禁记录。
 5. **健壮性**：行组帧喂入模糊字节（截断、超长、无换行 EOF），断言不崩溃。
 
 ## 9. 风险与对策
@@ -132,11 +134,12 @@ Python+Qt 技术栈决定，优化只能削掉地板之上的部分（1.1.0 已�
 | 单线程循环被慢阻塞（DNS 等） | 一律 `getaddrinfo` 异步化或限定 IP/主机名解析在连接状态机内做超时 |
 | WinSock 细节（非阻塞 connect、WSAGetLastError） | transport 层集中封装，core 零 WinSock；P1 先写传输层测试 |
 | zig cc ↔ MSVC ABI 差异影响未来 DLL 自研 | 全程 C 接口 + 独立进程通信（TCP），无跨语言链接面 |
-| 双实现文档不同步 | 本文件为唯一事实来源；Python README 标注过渡状态 |
+| 历史 Python 行为基准不可直接运行 | 保留 Git 历史作为参考；新协议行为先更新 C 测试 |
 
 ## 10. 与现有仓库的关系
 
-- `client-c/` 为唯一客户端实现；行为基准（Python `core/`）在互验通过后按
-  ADR 0007 移除，历史实现见 git 历史。
-- 仓库内 `dll/` 脚手架与 C 重写无关（见 ADR 0002），随 P4 一并移除。
+- `client-c/` 是唯一客户端实现；旧 Python 客户端与仓库内 C++ DLL 脚手架已按
+  ADR 0007 从工作树移除，历史版本保留在 Git 历史中。
+- `tools/mock_fsd_server.py` 与 `tools/smoke_gui.py` 是仅供开发期使用的 Python 工具，
+  不属于客户端运行时或产品实现。
 - 切换（P4）决策：Python 版直接删除，不归档（ADR 0007）。

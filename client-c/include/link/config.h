@@ -26,6 +26,8 @@ typedef struct {
     char eco[16];             /* vatsim | private | legacy */
     char type[16];            /* vatsim | legacy */
     char jwt_url[256];        /* FSD-JWT 换取端点（type=vatsim 时用） */
+    char jwt_proxy[256];      /* WinHTTP proxy list；空值使用 Windows 自动代理设置 */
+    char jwt_proxy_bypass[256]; /* 自定义 proxy 时不经代理的本地主机列表 */
     char model[8];
 
     /* 模拟 DLL 初始位置（字符串形式，与 Python 配置一致，空 = 用默认） */

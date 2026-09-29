@@ -73,7 +73,8 @@ typedef struct {
     WNDPROC old_msg_proc, old_xpdr_proc;
 
     HWND    page_conn[24]; int n_conn;      /* 连接页控件（页面切换） */
-    HWND    page_ws[40];   int n_ws;
+    /* build_ws_page registers 31 active controls plus 15 labels. */
+    HWND    page_ws[64];   int n_ws;
 
     /* 连接页 */
     HWND    ed_callsign, ed_cid, ed_password, ed_realname, ed_model;

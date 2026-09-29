@@ -35,7 +35,22 @@ static void trace_line(sess_t *s, const char *dir, const char *line)
     if (!s->trace || !s->on_debug)
         return;
     char buf[232];
-    _snprintf(buf, sizeof(buf) - 1, "%s %.200s", dir, line);
+    if (strncmp(line, "#AP", 3) == 0) {
+        /* 凭据既可能是明文密码，也可能是短时 JWT；协议跟踪一律遮盖。 */
+        const char *callsign_end = strchr(line + 3, ':');
+        const char *target_end = callsign_end ? strchr(callsign_end + 1, ':') : NULL;
+        const char *cid_end = target_end ? strchr(target_end + 1, ':') : NULL;
+        const char *password_end = cid_end ? strchr(cid_end + 1, ':') : NULL;
+        if (password_end) {
+            size_t prefix_len = (size_t)(cid_end + 1 - line);
+            _snprintf(buf, sizeof(buf) - 1, "%s %.*s[REDACTED]%s",
+                      dir, (int)prefix_len, line, password_end);
+        } else {
+            _snprintf(buf, sizeof(buf) - 1, "%s #AP[REDACTED]", dir);
+        }
+    } else {
+        _snprintf(buf, sizeof(buf) - 1, "%s %.200s", dir, line);
+    }
     buf[sizeof(buf) - 1] = '\0';
     s->on_debug(s->ud, buf);
 }
@@ -137,15 +152,19 @@ static void handshake_send_auth(sess_t *s)
     /* FSD-JWT（ASC/swift 兼容网络）：POST {cid,password} 换短时效 JWT，
      * #AP 密码位填 JWT + revision 100。阻塞 HTTPS，超时 10s，
      * 每次登录至多一次（docs/compatibility/fsd-jwt.md 契约）。 */
+    /* Keep the JWT buffer alive through formatting and socket send below. */
+    char token[1024] = {0};
     const char *auth_password = s->password;
     int revision = FSD_REVISION_LEGACY;
     if (s->vatsim) {
-        char token[1024], err[192];
-        if (jwt_acquire(s->jwt_url, s->cid, s->password,
+        char err[192];
+        if (jwt_acquire(s->jwt_url, s->jwt_proxy, s->jwt_proxy_bypass,
+                        s->cid, s->password,
                         token, sizeof(token), err, sizeof(err)) != 0) {
             char msg[320];
             _snprintf(msg, sizeof(msg) - 1, "JWT 获取失败：%s", err);
             msg[sizeof(msg) - 1] = '\0';
+            memset(token, 0, sizeof(token));
             sess_disconnect(s, msg);
             return;
         }
@@ -164,23 +183,17 @@ static void handshake_send_auth(sess_t *s)
     };
     if (fsd_build_auth(line, sizeof(line), &auth) == 0)
         sess_send_raw(s, line);
+    memset(token, 0, sizeof(token));
     s->diag_flags |= HF_AUTH_SENT;
     s->deadline = net_now() + HANDSHAKE_TIMEOUT;
 }
 
 static void handshake_online(sess_t *s)
 {
-    char line[FSD_MAX_LINE];
-
     /* 先置在线态：以下发送（$FP 等）带在线守卫 */
     s->state = SESS_ONLINE;
 
-    /* 声明 SquawkBox 客户端类型（服务器路由 @ 包所需） */
-    _snprintf(line, sizeof(line) - 1, "#SB%s:SERVER", s->callsign);
-    line[sizeof(line) - 1] = '\0';
-    sess_send_raw(s, line);
-
-    /* 最小飞行计划：加入广播列表（字段默认值与 Python _send_minimal_flight_plan 一致） */
+    /* 先提交最小飞行计划，再开始位置报告；#SB 是定向模型消息，不是登录声明。 */
     sess_fp_t fp;
     memset(&fp, 0, sizeof(fp));
     fp.type = "I";
@@ -527,33 +540,23 @@ void sess_tick(sess_t *s, double now)
         return;
     }
 
-    /* keepalive：legacy 用 #TM 空跳；VATSIM 用缓存位置重发 @（防跳变） */
+    /* FSD 不把 #TM 发往 SERVER 当作 keepalive；所有 dialect 都重发最后位置。
+     * 缓存应答机状态也会在用户切换 ALT/STBY/IDENT 时同步。 */
     if (now >= s->next_keepalive) {
         s->next_keepalive = now + KEEPALIVE_INTERVAL;
         char line[FSD_MAX_LINE];
-        if (!s->vatsim) {
-            _snprintf(line, sizeof(line) - 1, "#TM%s:SERVER:@", s->callsign);
-            line[sizeof(line) - 1] = '\0';
-        } else {
-            fsd_position_args p;
-            memset(&p, 0, sizeof(p));
-            p.callsign = s->callsign;
-            p.xpdr = s->last_xpdr;
-            p.rating = s->rating;
-            p.lat = s->has_position ? s->last_lat : s->init_lat;
-            p.lon = s->has_position ? s->last_lon : s->init_lon;
-            p.alt_ft = s->last_alt_ft;
-            p.gs_kts = s->last_gs;
-            p.heading_deg = 0.0f;
-            p.mode_letter = s->last_mode;
-            uint32_t pbh = s->has_position ? s->last_pbh : 0;
-            int n = _snprintf(line, sizeof(line) - 1,
-                              "@%c:%s:%s:%d:%.5f:%.5f:%d:%d:%u:0",
-                              p.mode_letter, p.callsign, p.xpdr, p.rating,
-                              p.lat, p.lon, p.alt_ft, p.gs_kts,
-                              (unsigned)pbh);
-            line[n] = '\0';
+        double lat = s->has_position ? s->last_lat : s->init_lat;
+        double lon = s->has_position ? s->last_lon : s->init_lon;
+        uint32_t pbh = s->has_position ? s->last_pbh : 0;
+        int n = _snprintf(line, sizeof(line) - 1,
+                          "@%c:%s:%s:%d:%.5f:%.5f:%d:%d:%u:0",
+                          s->last_mode, s->callsign, s->last_xpdr, s->rating,
+                          lat, lon, s->last_alt_ft, s->last_gs, (unsigned)pbh);
+        if (n < 0 || (size_t)n >= sizeof(line) - 1) {
+            sess_disconnect(s, "位置保活报文构造失败");
+            return;
         }
+        line[n] = '\0';
         /* 发送失败视为连接中断（Python drain 抛异常退出循环） */
         if (sess_send_raw(s, line) != 0) {
             sess_disconnect(s, "发送失败（连接中断）");
@@ -620,6 +623,15 @@ int sess_send_position(sess_t *s, double lat, double lon, int alt_ft,
     s->last_mode = mode_letter;
     s->has_position = true;
     return 0;
+}
+
+void sess_cache_xpdr(sess_t *s, const char *xpdr, char mode_letter)
+{
+    if (!s)
+        return;
+    strncpy(s->last_xpdr, xpdr ? xpdr : "7000", sizeof(s->last_xpdr) - 1);
+    s->last_xpdr[sizeof(s->last_xpdr) - 1] = '\0';
+    s->last_mode = mode_letter ? mode_letter : 'N';
 }
 
 int sess_send_tm(sess_t *s, const char *dest, const char *text)

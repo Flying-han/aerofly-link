@@ -1,6 +1,6 @@
 # Aerofly Link
 
-> Open-source FSD connectivity client for Aerofly FS 4 — native C, single binary.
+> Aerofly Link 0.3.0 — Open-source FSD connectivity client for Aerofly FS 4, implemented in native C.
 
 Aerofly Link is an unofficial community project. It is not affiliated with or endorsed by IPACS.
 
@@ -14,13 +14,18 @@ See the Chinese [README.md](README.md) for the full documentation.
 - Transponder controls and full flight-plan submission
 - Mock DLL mode for development without Aerofly FS 4
 
+New installs use the VATSIM FSD-JWT protocol. Server address, port, JWT endpoint,
+and the JWT-only proxy (`jwt_proxy` / `jwt_proxy_bypass`) remain user-configurable
+in `%APPDATA%\AeroflyLink\settings.json`; an empty proxy uses Windows automatic
+proxy settings. Legacy revision 9 remains available as an explicit compatibility mode.
+
 ## Build
 
 ```cmd
 cd client-c
 build.cmd
 :: outputs: build\aeroflylink.exe (GUI), build\aeroflylink-cli.exe (headless)
-:: requires zig cc; tests run automatically at the end
+:: requires zig cc from the active vfox Zig toolchain; C tests run automatically at the end
 ```
 
 ## Documentation

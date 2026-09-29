@@ -29,13 +29,23 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" client-c\setup\aerofly_link_setup.iss
+      - name: Generate installer checksum
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem dist_installer -Filter 'AeroflyLink_Setup_*.exe')
+          if ($installers.Count -ne 1) { throw "Expected one installer, found $($installers.Count)" }
+          $hash = (Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $line = "$hash  $($installers[0].Name)" + "`n"
+          [IO.File]::WriteAllText('dist_installer/SHA256SUMS.txt', $line, [Text.Encoding]::ASCII)
       - uses: actions/upload-artifact@v4
         with:
           name: installer
-          path: dist_installer/*.exe
+          path: |
+            dist_installer/AeroflyLink_Setup_*.exe
+            dist_installer/SHA256SUMS.txt
           if-no-files-found: error
       - name: Attach to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: cmd
-        run: gh release create %GITHUB_REF_NAME% --generate-notes dist_installer\AeroflyLink_Setup_*.exe
+        run: gh release create %GITHUB_REF_NAME% --generate-notes dist_installer\AeroflyLink_Setup_*.exe dist_installer\SHA256SUMS.txt

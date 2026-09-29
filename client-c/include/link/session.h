@@ -56,6 +56,8 @@ typedef struct {
     int  rating;
     bool vatsim;              /* true=VATSIM dialect(FSD-JWT rev100)，false=legacy(rev9) */
     char jwt_url[256];        /* FSD-JWT 换取端点（vatsim 模式用） */
+    char jwt_proxy[256];      /* 空值使用系统/用户代理；否则是 WinHTTP proxy list */
+    char jwt_proxy_bypass[256];
     double init_lat, init_lon;
     int  init_alt_ft;
 
@@ -119,6 +121,9 @@ int sess_send_position(sess_t *s, double lat, double lon, int alt_ft,
 
 int sess_send_tm(sess_t *s, const char *dest, const char *text);
 int sess_send_flightplan(sess_t *s, const sess_fp_t *fp);
+
+/* 供 app：更新无上报期间 keepalive 复用的应答机状态。 */
+void sess_cache_xpdr(sess_t *s, const char *xpdr, char mode_letter);
 
 /* 供 app：keepalive 复用的位置缓存写入（遥测不可用时的初始位置） */
 void sess_set_initial_position(sess_t *s, double lat, double lon, int alt_ft);

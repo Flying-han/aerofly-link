@@ -324,9 +324,11 @@ void sync_pages(void)
 {
     int now = (G.app.sess.state != SESS_DISCONNECTED) ? 1 : 0;
     if (now != G.page_shown) {
+        bool was_initialized = G.page_shown >= 0;
         G.page_shown = now;
         set_connected_ui(now);
-        if (!now)
+        /* 初次启动时先保留配置加载的飞行计划；真正断开后再清空表单。 */
+        if (!now && was_initialized)
             reset_fp_fields();   /* 断开重置（Python main_window reset_fields） */
     }
 }
@@ -369,6 +371,7 @@ void ui_from_cfg(void)
     int eco_sel = strcmp(c->eco, "vatsim") == 0 ? 0
                 : strcmp(c->eco, "legacy") == 0 ? 2 : 1;
     ComboBox_SetCurSel(G.cb_eco, eco_sel);
+    ComboBox_SetCurSel(G.cb_type, strcmp(c->type, "vatsim") == 0 ? 0 : 1);
 }
 
 /* 连接字段 UI → cfg（退出保存路径只调此，避免覆盖已重置的 FP 字段） */
