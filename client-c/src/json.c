@@ -2,11 +2,150 @@
 #include "link/json.h"
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
-/* 定位 key 对应值的起始指针。
- * 返回值指向值首字符（" 中心或数字首字符），找不到返回 NULL。
- * 实现按"键名逐个匹配"扫描，避免对整个文档做词法分析。 */
+/* Return the byte after a JSON string, respecting escaped quotes. */
+static const char *skip_json_string(const char *p)
+{
+    if (!p || *p != '"')
+        return NULL;
+    for (++p; *p; ++p) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '"')
+            return p + 1;
+        if (c < 0x20)
+            return NULL;
+        if (c == '\\') {
+            if (!p[1] || (unsigned char)p[1] < 0x20)
+                return NULL;
+            ++p;
+        }
+    }
+    return NULL;
+}
+
+static int hex_value(unsigned char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static bool read_hex4(const char *p, uint32_t *value)
+{
+    uint32_t v = 0;
+    for (int i = 0; i < 4; ++i) {
+        int h = hex_value((unsigned char)p[i]);
+        if (h < 0)
+            return false;
+        v = (v << 4) | (uint32_t)h;
+    }
+    *value = v;
+    return true;
+}
+
+static bool append_utf8(uint32_t cp, char *out, size_t cap, size_t *used)
+{
+    unsigned char bytes[4];
+    size_t n;
+    if (cp == 0)
+        return false; /* C strings cannot represent embedded JSON NUL safely. */
+    if (cp <= 0x7f) {
+        bytes[0] = (unsigned char)cp;
+        n = 1;
+    } else if (cp <= 0x7ff) {
+        bytes[0] = (unsigned char)(0xc0 | (cp >> 6));
+        bytes[1] = (unsigned char)(0x80 | (cp & 0x3f));
+        n = 2;
+    } else if (cp <= 0xffff && !(cp >= 0xd800 && cp <= 0xdfff)) {
+        bytes[0] = (unsigned char)(0xe0 | (cp >> 12));
+        bytes[1] = (unsigned char)(0x80 | ((cp >> 6) & 0x3f));
+        bytes[2] = (unsigned char)(0x80 | (cp & 0x3f));
+        n = 3;
+    } else if (cp <= 0x10ffff) {
+        bytes[0] = (unsigned char)(0xf0 | (cp >> 18));
+        bytes[1] = (unsigned char)(0x80 | ((cp >> 12) & 0x3f));
+        bytes[2] = (unsigned char)(0x80 | ((cp >> 6) & 0x3f));
+        bytes[3] = (unsigned char)(0x80 | (cp & 0x3f));
+        n = 4;
+    } else {
+        return false;
+    }
+    if (*used + n >= cap)
+        return false;
+    memcpy(out + *used, bytes, n);
+    *used += n;
+    return true;
+}
+
+/* Decode one JSON string into UTF-8. Malformed escapes fail closed. */
+static bool decode_json_string(const char *start, char *out, size_t cap,
+                               const char **after)
+{
+    if (!start || !out || cap == 0 || *start != '"')
+        return false;
+    const unsigned char *p = (const unsigned char *)start + 1;
+    size_t used = 0;
+    while (*p) {
+        uint32_t cp;
+        if (*p == '"') {
+            out[used] = '\0';
+            if (after)
+                *after = (const char *)(p + 1);
+            return true;
+        }
+        if (*p < 0x20)
+            return false;
+        if (*p != '\\') {
+            if (used + 1 >= cap)
+                return false;
+            out[used++] = (char)*p++;
+            continue;
+        }
+
+        ++p;
+        switch (*p++) {
+        case '"': cp = '"'; break;
+        case '\\': cp = '\\'; break;
+        case '/': cp = '/'; break;
+        case 'b': cp = '\b'; break;
+        case 'f': cp = '\f'; break;
+        case 'n': cp = '\n'; break;
+        case 'r': cp = '\r'; break;
+        case 't': cp = '\t'; break;
+        case 'u': {
+            uint32_t first;
+            if (!read_hex4((const char *)p, &first))
+                return false;
+            p += 4;
+            if (first >= 0xd800 && first <= 0xdbff) {
+                uint32_t second;
+                if (p[0] != '\\' || p[1] != 'u'
+                    || !read_hex4((const char *)p + 2, &second)
+                    || second < 0xdc00 || second > 0xdfff)
+                    return false;
+                p += 6;
+                cp = 0x10000 + ((first - 0xd800) << 10)
+                   + (second - 0xdc00);
+            } else if (first >= 0xdc00 && first <= 0xdfff) {
+                return false;
+            } else {
+                cp = first;
+            }
+            break;
+        }
+        default:
+            return false;
+        }
+        if (!append_utf8(cp, out, cap, &used))
+            return false;
+    }
+    return false;
+}
+
+/* Locate an object key and return its value start; nested JSON is unnecessary. */
 static const char *find_value(const char *doc, const char *key)
 {
     if (!doc || !key)
@@ -17,19 +156,23 @@ static const char *find_value(const char *doc, const char *key)
 
     while ((p = strchr(p, '"')) != NULL) {
         const char *key_start = p + 1;
-        const char *key_end = strchr(key_start, '"');
-        if (!key_end)
+        const char *after_key = skip_json_string(p);
+        if (!after_key)
             return NULL;   /* 引号不闭合，文档损坏 */
+        const char *key_end = after_key - 1;
 
         if ((size_t)(key_end - key_start) == klen
             && memcmp(key_start, key, klen) == 0) {
-            /* 键名匹配，找值：跳过冒号与空白 */
-            const char *v = key_end + 1;
-            while (*v == ' ' || *v == '\t' || *v == '\r' || *v == '\n' || *v == ':')
+            const char *v = after_key;
+            while (*v == ' ' || *v == '\t' || *v == '\r' || *v == '\n')
                 v++;
-            return *v ? v : NULL;
+            if (*v == ':') {
+                do { ++v; } while (*v == ' ' || *v == '\t'
+                                    || *v == '\r' || *v == '\n');
+                return *v ? v : NULL;
+            }
         }
-        p = key_end + 1;
+        p = after_key;
     }
     return NULL;
 }
@@ -52,27 +195,7 @@ bool jsn_number(const char *doc, const char *key, double *out)
 bool jsn_string(const char *doc, const char *key, char *out, size_t cap)
 {
     const char *v = find_value(doc, key);
-    if (!v || *v != '"')
-        return false;
-    v++;   /* 跳过开头引号 */
-
-    size_t j = 0;
-    while (*v && *v != '"' && j < cap - 1) {
-        /* 最小转义支持：\" \\ \/ 以及 \n \t（遥测 Aircraft.Name 可能含转义） */
-        if (*v == '\\' && v[1]) {
-            v++;
-            switch (*v) {
-            case 'n': out[j++] = '\n'; break;
-            case 't': out[j++] = '\t'; break;
-            default:  out[j++] = *v;   break;   /* \" \\ \/ 等 */
-            }
-        } else {
-            out[j++] = *v;
-        }
-        v++;
-    }
-    out[j] = '\0';
-    return *v == '"';   /* 必须以引号闭合才算成功 */
+    return cap > 0 && decode_json_string(v, out, cap, NULL);
 }
 
 /* 解析 v 指向的 '[' 起的字符串数组，追加到 out[*n]（上限 max）。
@@ -89,19 +212,11 @@ static bool array_append(const char *v, char out[][JSN_STR_CAP],
         if (*v != '"')
             return false;   /* 数组只支持字符串元素 */
 
-        const char *e = v + 1;
-        while (*e && *e != '"')
-            e++;
-        if (!*e)
+        const char *after = NULL;
+        if (!decode_json_string(v, out[*n], JSN_STR_CAP, &after))
             return false;
-
-        size_t len = (size_t)(e - (v + 1));
-        if (len >= JSN_STR_CAP)
-            len = JSN_STR_CAP - 1;
-        memcpy(out[*n], v + 1, len);
-        out[*n][len] = '\0';
         (*n)++;
-        v = e + 1;
+        v = after;
     }
     return true;
 }
@@ -128,20 +243,23 @@ static const char *find_value_bounded(const char *lo, const char *hi,
     const char *p = lo;
     while (p < hi && (p = memchr(p, '"', (size_t)(hi - p))) != NULL) {
         const char *key_start = p + 1;
-        const char *key_end = key_start;
-        while (key_end < hi && *key_end != '"')
-            key_end++;
-        if (key_end >= hi)
+        const char *after_key = skip_json_string(p);
+        if (!after_key || after_key > hi)
             return NULL;
+        const char *key_end = after_key - 1;
         if ((size_t)(key_end - key_start) == klen
             && memcmp(key_start, key, klen) == 0) {
-            const char *v = key_end + 1;
+            const char *v = after_key;
             while (v < hi && (*v == ' ' || *v == '\t' || *v == '\r'
-                              || *v == '\n' || *v == ':'))
+                              || *v == '\n'))
                 v++;
-            return v < hi ? v : NULL;
+            if (v < hi && *v == ':') {
+                do { ++v; } while (v < hi && (*v == ' ' || *v == '\t'
+                                               || *v == '\r' || *v == '\n'));
+                return v < hi ? v : NULL;
+            }
         }
-        p = key_end + 1;
+        p = after_key;
     }
     return NULL;
 }
@@ -163,12 +281,21 @@ bool jsn_read_servers(const char *doc, const char *key,
     const char *obj = v + 1;
     int depth = 1;
     const char *obj_end = obj;
-    for (; *obj_end; obj_end++) {
-        if (*obj_end == '{') {
+    for (; *obj_end; ) {
+        if (*obj_end == '"') {
+            const char *after = skip_json_string(obj_end);
+            if (!after)
+                return false;
+            obj_end = after;
+        } else if (*obj_end == '{') {
             depth++;
+            obj_end++;
         } else if (*obj_end == '}') {
             if (--depth == 0)
                 break;
+            obj_end++;
+        } else {
+            obj_end++;
         }
     }
     if (*obj_end != '}')

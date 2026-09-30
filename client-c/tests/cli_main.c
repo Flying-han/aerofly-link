@@ -155,9 +155,9 @@ int main(int argc, char **argv)
 #undef FP
     strcpy(app.fp_type, "I");
 
-    printf("Aerofly Link CLI %s —— %s@%s:%d (%s/%s)\n",
+    printf("Aerofly Link CLI %s —— %s@%s:%d (auth: %s)\n",
            AEROFLYLINK_VERSION, cfg.callsign, cfg.server, cfg.port,
-           cfg.eco, cfg.type);
+           (strcmp(cfg.type, "vatsim") == 0) ? "FSD-JWT" : "legacy");
     printf("配置: %s\n输入 /help 查看控制台命令\n", cfg_path);
 
     if (use_mock)

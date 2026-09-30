@@ -1,1 +1,3 @@
 client-c/build.cmd text eol=crlf
+client-c/build-e2e-gui.cmd text eol=crlf
+client-c/vendor/nuklear/*.h text eol=lf

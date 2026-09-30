@@ -37,6 +37,16 @@ def log(msg: str) -> None:
         log_fh.flush()
 
 
+def redact_protocol_line(line: str) -> str:
+    """Keep test traces useful without writing an FSD login password to disk."""
+    if line.startswith("#AP"):
+        fields = line[3:].split(":")
+        if len(fields) >= 4:
+            fields[3] = "[REDACTED]"
+            return "#AP" + ":".join(fields)
+    return line
+
+
 async def push_traffic(writer) -> None:
     """周期推送 @ 位置包与 $PI（验证客户端的 traffic 表与 pong）。"""
     try:
@@ -65,7 +75,7 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> 
             if not raw:
                 break
             line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-            log(f"<<< {line}")
+            log(f"<<< {redact_protocol_line(line)}")
 
             if line.startswith("#AP"):
                 writer.write(b"#TMAuth OK, welcome pilot\r\n")

@@ -6,6 +6,8 @@
 
 - [ ] `client-c\build.cmd` (zig cc) for changes to the C client
 - [ ] Relevant C unit tests and Mock FSD/bridge checks
+- [ ] GUI changes: `client-c\build-e2e-gui.cmd` and `python tools/smoke_gui.py`
+- [ ] Workflow changes: reviewed permissions, action pins, artifact contents, and release triggers
 
 ## Checklist
 

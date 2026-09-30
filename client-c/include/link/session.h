@@ -54,8 +54,8 @@ typedef struct {
     char server[128];
     int  port;
     int  rating;
-    bool vatsim;              /* true=VATSIM dialect(FSD-JWT rev100)，false=legacy(rev9) */
-    char jwt_url[256];        /* FSD-JWT 换取端点（vatsim 模式用） */
+    bool vatsim;              /* internal legacy name: true=FSD-JWT rev100 dialect */
+    char jwt_url[256];        /* FSD-JWT HTTPS endpoint when vatsim/internal JWT mode */
     char jwt_proxy[256];      /* 空值使用系统/用户代理；否则是 WinHTTP proxy list */
     char jwt_proxy_bypass[256];
     double init_lat, init_lon;

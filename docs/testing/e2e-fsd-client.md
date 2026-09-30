@@ -10,7 +10,7 @@
 - 账号、CID、密码、JWT、数据库口令均为临时合成值。配置和响应写在 `client-c/build/`（已忽略）；不要复制 JWT、trace、配置或数据库内容到 PR/Release。
 - 不复用、不停止其他容器或卷；清理时只对本次 Compose project 执行 `down -v`。禁止使用全局 Docker prune。
 - 本地 Go module 下载使用用户指定的 v2rayN `10808` 代理参数；脚本不修改 v2rayN、WinHTTP、Windows 代理或 vfox 全局设置。
-- `e2e_jwt_provider_stub.c` 和 `e2e_gui_prepopulate.c` 只用于本地 E2E 的链接变体；`build.cmd` 发布 GUI/CLI 不编译它们，也不放宽 TLS 校验。
+- `e2e_jwt_provider_stub.c` 只链接到单独的测试 GUI/CLI 变体；`build.cmd` 的正式 GUI/CLI 不编译它，也不放宽 TLS 校验。
 
 ## 复现环境
 
@@ -115,7 +115,7 @@ zig cc -static build/e2e_jwt_provider_stub.obj build/cli_main.obj build/libfsd.a
 Pop-Location
 ```
 
-GUI E2E 另编译 `src/gui.c` 时加 `-DAEROFLYLINK_E2E_GUI` 并链接 `tests/e2e_gui_prepopulate.c`。该宏只存在于测试变体；发布构建仍使用正常 `build.cmd` 目标。把 FSD 自动分配 CID、呼号、合成密码、测试 JWT 和隔离 `APPDATA` 设为进程级环境变量，再运行 `python -u tools/smoke_gui.py`。
+GUI E2E 用 `client-c\build-e2e-gui.cmd` 构建独立的 `build\aeroflylink-e2e.exe`；它使用同一 GUI、Nuklear 对象和 FSD core，只在测试宏下从进程环境读取合成密码并链接 JWT provider stub。运行 `tools/smoke_gui.py` 时使用隔离 APPDATA，驱动连接命令并轮询 FSD `/api/clients`。该可执行文件留在 gitignored `client-c/build/`，正式 `build.cmd` 与安装包不包含测试注入路径。
 
 ## 覆盖矩阵
 
@@ -128,11 +128,11 @@ GUI E2E 另编译 `src/gui.c` 时加 `-DAEROFLYLINK_E2E_GUI` 并链接 `tests/e2
 | 飞行/位置 | 两客户端都连接内置 C Mock DLL | `@` 连续上报、peer traffic 转发；完整 `$FP` 写入临时 MariaDB，核对呼号/机场/航路 |
 | 文本/应答机 | CLI `/ident`、`/stby`、`/alt`、`/squawk`、`@呼号 消息` | 双向 `#TM` 到达；位置 mode/代码反映 IDENT、STBY/0000、恢复 ALT/4321 |
 | keepalive/退出 | 保持会话超过两个 30 秒窗口 | STBY 时发缓存位置 `@S...:0000`；无 `$ER`；`/quit` 发 `#DP`，在线快照清空 |
-| GUI | test-only GUI fixture + 隔离 APPDATA | Win32 GUI 以 VATSIM 模式上线，FSD 在线 API 出现测试呼号；连接页/工作区截图生成，WM_CLOSE 退出 |
+| GUI | `build-e2e-gui.cmd` + 隔离 APPDATA | Nuklear GUI 连接本地 FSD，`/api/clients` 出现测试呼号；连接页/工作区/设置、多语言/浅色截图生成，WM_CLOSE 退出 |
 | Redis 故障 | 仅停止该 Compose project 的 `redis` service | `/api/fsd-jwt` 限流返回 `503 RATE_LIMIT_BACKEND_UNAVAILABLE`；Redis 恢复后 FSD ready `200` |
 | 社区自定义 | C 单测 + 配置读写 | `jwt_url`、FSD 服务地址、认证模式、`jwt_proxy` 与 bypass 列表可配置并经过 app/session 和 settings round-trip；空 proxy 使用 Windows 自动代理 |
 
-GUI 外部 FSD 模式额外断言设置文件中的呼号/CID被连接页加载，控件 ID 为 100/101，`private` 网络的认证下拉默认选中 VATSIM。普通发布构建不包含预填充 fixture；它只由带 `AEROFLYLINK_E2E_GUI` 宏的测试 GUI 使用。
+GUI 外部 FSD 模式检查隔离设置中的呼号/CID和所选服务端；测试变体从合成环境值准备掩码密码字段。正式构建没有测试环境密码注入，也不会把密码写入设置。
 
 ## TLS 验收边界
 
@@ -142,7 +142,7 @@ GUI 外部 FSD 模式额外断言设置文件中的呼号/CID被连接页加载�
 
 WinHTTP 使用 `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY` 处理空 `jwt_proxy`；显式配置时仅 JWT HTTP 会话使用配置内的命名代理和 bypass 列表，不修改 Windows 全局代理。vfox Zig 构建及配置 round-trip 单测验证配置传递；由于隔离服务端没有受信任 HTTPS 证书，本轮未进行产品 WinHTTP TLS 成功请求验收。
 
-## 本次证据（2026-09-29）
+## v0.3.0 本地证据（2026-09-29）
 
 - 客户端分支基线：`refactor/quality-v1.1`；`client-c/VERSION=0.3.0`。
 - vfox Zig `0.15.1`：`170/170` 协议断言、`106/106` 会话/桥接/配置断言通过。
@@ -155,6 +155,16 @@ WinHTTP 使用 `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY` 处理空 `jwt_proxy`；显
 - 仓库内 Compose fixture 使用 internal DB/Redis backend 和 FSD client bridge；启动 migration、loopback `readyz` 验证通过。
 - GUI 构建首次暴露静态库残留测试/界面对象问题；`build.cmd` 现先重建 `libfsd.a`，归档成员检查通过。
 - 尚未通过：产品 WinHTTP 对隔离 HTTPS JWT endpoint 的完整成功路径、公网 VATSIM/生产互操作。
+
+## v0.3.1 本地验证（2026-09-29）
+
+- 客户端版本：`client-c/VERSION=0.3.1`。vfox Zig `0.15.1`：170/170 协议断言、145/145 会话/桥接/配置断言通过；Nuklear/GDI GUI 构建无编译警告。正式 GUI 与隔离 E2E GUI 均检查为 Windows GUI 子系统（PE subsystem 2）。
+- `python tools/smoke_cli.py`：本地 Mock FSD 登录、计划、位置、聊天、应答机和 `#DP` 退出通过。Mock 日志将 `#AP` 密码字段替换为 `[REDACTED]`；密码未写入配置。
+- `client-c\build-e2e-gui.cmd` + `python tools/smoke_gui.py`：本地 Mock FSD 与隔离 `%APPDATA%` E2E 通过，确认登录在线、连接/飞行/设置页、紧凑宽度、简中/繁中/美式英语、深色/浅色、三种本地化标题栏，以及关闭时发送 `#DP`；12 张 GUI 截图保存在忽略的 `client-c/build/e2e-smoke/`。
+- 本地 FSD GUI E2E：干净 `FlightSimulatorDaemonForASC` `Version-0.6.2` checkout，commit `8142a8570c1f3ca612734363cdefe637fc0d2c97`。只读源码构建镜像，OCI revision 标签与 commit 一致；镜像 digest `sha256:b3eafffaf5d4c5250cd9424d2b97e75c09c2c2d6deafaf7086e7bd623ff45384`。基础镜像 `golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195`。
+- Docker Desktop/Engine `29.8.1` Linux；MariaDB `10.11.19`、Redis `8.10.1`。migration、`/healthz`、`/readyz`、服务版本、合成管理员与本地 `/api/fsd-jwt` 均通过。GUI 以 revision 100 登录，在线快照出现测试呼号，关闭 GUI 后在线条目清除。
+- Docker 测试使用唯一 Compose project、一次性账号/JWT/数据库卷和仅绑定 `127.0.0.1` 的端口；结束后删除该 project 的容器/卷/网络及本轮镜像和临时配置。没有运行全局 prune，FSD 源仓库保持只读。
+- 本地 FSD JWT 由 test-only 链接 stub 注入，因此验证真实 FSD 会话 wire 和服务端校验，但**不验证**产品 WinHTTP 对受信 HTTPS endpoint 的成功获取路径。没有连接公网 ASC、VATSIM、staging 或生产环境。
 
 ## 收尾
 

@@ -2,55 +2,102 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  c-client:
-    # C 客户端构建 + 单测 + 产物上传（单轨，docs/C_REWRITE_PLAN.md）
-    runs-on: windows-latest
+  windows:
+    name: Windows build, tests, and installer validation
+    runs-on: windows-2022
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.15.1
-      - name: Build & test
+
+      - name: Set up Python for E2E tools
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: tools/requirements-e2e.txt
+
+      - name: Install E2E requirements
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check --requirement tools/requirements-e2e.txt
+
+      - name: Build and run C tests
         shell: cmd
         run: client-c\build.cmd
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
+
+      - name: Build test-only GUI
+        shell: cmd
+        run: client-c\build-e2e-gui.cmd
+
+      - name: Run CLI Mock FSD E2E
+        shell: pwsh
+        run: python tools/smoke_cli.py
+
+      - name: Run GUI Mock FSD E2E
+        shell: pwsh
+        run: python tools/smoke_gui.py
+
+      - name: Upload Windows client binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: aeroflylink-binaries
+          name: aeroflylink-windows-x64
           path: |
             client-c/build/aeroflylink.exe
             client-c/build/aeroflylink.exe.manifest
             client-c/build/aeroflylink-cli.exe
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
 
-  installer:
-    # 安装器编译验证（ISCC 语法 / VERSION 读取 / 载荷路径）
-    # AeroflyBridge.dll 为 gitignored 载荷，CI 用占位文件仅验证脚本本身
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
+      - name: Upload GUI E2E screenshots and redacted mock log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          version: 0.15.1
-      - name: Build
-        shell: cmd
-        run: client-c\build.cmd
-      - name: Place placeholder bridge DLL
-        shell: cmd
+          name: gui-e2e-evidence
+          path: |
+            client-c/build/e2e-smoke/*.png
+            client-c/build/e2e-smoke/fsd_mock.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Install Inno Setup for script validation
+        shell: pwsh
         run: |
-          cd client-c\setup
-          rem 占位仅验证 .iss 编译；真实载荷由 release.yml 从上游下载
-          echo placeholder>AeroflyBridge.dll
-      - name: Compile installer
-        shell: cmd
+          choco install innosetup --version=6.7.1 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Compile installer script with a test-only placeholder
+        shell: pwsh
         run: |
-          choco install innosetup -y --no-progress
-          "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" client-c\setup\aerofly_link_setup.iss
-      - uses: actions/upload-artifact@v4
-        with:
-          name: installer
-          path: dist_installer/*.exe
-          if-no-files-found: error
+          $placeholder = 'client-c/setup/AeroflyBridge.dll'
+          if (Test-Path -LiteralPath $placeholder) {
+            throw 'The CI checkout unexpectedly contains a Bridge DLL.'
+          }
+          [IO.File]::WriteAllText($placeholder, 'TEST PLACEHOLDER - NEVER DISTRIBUTE', [Text.Encoding]::ASCII)
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          & $compiler 'client-c/setup/aerofly_link_setup.iss'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $packages = @(Get-ChildItem -LiteralPath 'dist_installer' -Filter 'AeroflyLink_Setup_*.exe')
+          if ($packages.Count -ne 1) { throw "Expected one script-validation package, found $($packages.Count)." }
+          Remove-Item -LiteralPath $packages[0].FullName -Force
+          Remove-Item -LiteralPath $placeholder -Force

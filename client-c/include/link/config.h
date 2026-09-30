@@ -1,8 +1,8 @@
 /**
  * config.h —— settings.json 读写
  * ================================================================
- * 与 Python 版配置文件同路径同字段（%APPDATA%/AeroflyLink/settings.json），
- * 两个实现可互换读写。策略见 ADR 0003：**密码永不写入磁盘**——
+ * 与历史配置文件保持路径兼容（%APPDATA%/AeroflyLink/settings.json）；
+ * 新文件使用 auth_mode，旧 type/eco 键仅作读取兼容。策略见 ADR 0003：**密码永不写入磁盘**——
  * cfg_save 输出的文档不含 password；cfg_load 遇到旧文件里的 password 忽略。
  */
 #ifndef LINK_CONFIG_H
@@ -23,9 +23,11 @@ typedef struct {
     char server[128];
     int  port;
     int  rating;              /* 默认 FSD_RATING_DEFAULT (S1) */
-    char eco[16];             /* vatsim | private | legacy */
-    char type[16];            /* vatsim | legacy */
-    char jwt_url[256];        /* FSD-JWT 换取端点（type=vatsim 时用） */
+    char eco[16];             /* legacy metadata; loaded for compatibility only */
+    char type[16];            /* internal dialect: vatsim (FSD-JWT) | legacy */
+    char language[16];        /* zh-CN | zh-HK | en-US */
+    char theme[16];            /* dark | light */
+    char jwt_url[256];        /* HTTPS FSD-JWT endpoint (auth_mode=fsd-jwt) */
     char jwt_proxy[256];      /* WinHTTP proxy list；空值使用 Windows 自动代理设置 */
     char jwt_proxy_bypass[256]; /* 自定义 proxy 时不经代理的本地主机列表 */
     char model[8];
@@ -41,6 +43,7 @@ typedef struct {
 
     /* 飞行计划持久字段 */
     char fp_aircraft[8];
+    char fp_type[8];
     char fp_wake[16];
     char fp_tas[8];
     char fp_dep[8];

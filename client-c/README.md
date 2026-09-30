@@ -2,12 +2,12 @@
 
 C11 全量重写的客户端（决策与路线见 [docs/adr/0001-c-rewrite.md](../docs/adr/0001-c-rewrite.md)
 与 [docs/C_REWRITE_PLAN.md](../docs/C_REWRITE_PLAN.md)）。
-P0 协议层、P1 传输/桥接、P2 无头客户端、P3 Win32 GUI 均已落地。
-应用版本号由 `VERSION` 单一管理；当前版本为 `0.3.0`。
-新配置默认使用 VATSIM FSD-JWT/revision 100；`jwt_url`、`jwt_proxy`、
-`jwt_proxy_bypass`、服务地址和端口都可通过 `settings.json` 自定义。`jwt_proxy` 留空时
-使用 Windows 自动代理；也可仅为 JWT 请求设置 WinHTTP proxy list
-（如 `http=127.0.0.1:10808;https=127.0.0.1:10808`）。legacy/revision 9 保留为显式兼容模式。
+P0 协议层、P1 传输/桥接、P2 无头客户端均保留；v0.3.1 的桌面 GUI 使用 Nuklear 与 Win32/GDI。
+应用版本号由 `VERSION` 单一管理；当前版本为 `0.3.1`。
+新配置默认服务器为 ASC `flight.skeet.top:6809`，认证字段在 JSON 中称为 `auth_mode`。
+`fsd-jwt` 使用 revision 100 和 HTTPS 令牌地址；`legacy` 使用 revision 9。
+令牌地址、应用代理、绕过列表和服务器列表都可从 GUI 设置页修改。VATSIM 地址只作参考；
+Aerofly Link 未获 VATSIM 批准，GUI 不提供 VATSIM 直连。
 本地 Docker FSD E2E 规范与证据见 [docs/testing/e2e-fsd-client.md](../docs/testing/e2e-fsd-client.md)。
 
 ## 布局
@@ -26,7 +26,8 @@ client-c/
 │   ├── transponder.h # 应答机双轨制（虚拟状态 + DLL 写入降级）
 │   ├── mock.h        # 内嵌模拟 DLL 服务器（心形航线 10Hz）
 │   └── app.h         # 应用编排（1Hz 上报/同步检查/附近飞机）
-├── src/              # 对应实现 + gui.c（Win32 界面）
+├── src/              # 模块实现、Nuklear 实现与 Win32/GDI 界面
+├── vendor/nuklear/   # 固定版本上游源码与许可证
 ├── tests/
 │   ├── test_main.c   # 协议层断言
 │   ├── test_p2.c     # 会话握手/桥接契约/配置断言
@@ -39,10 +40,12 @@ client-c/
 ```cmd
 cd client-c
 build.cmd
+build-e2e-gui.cmd     # 仅本地 E2E 使用；不进入安装包
 ```
 
 产物（build/）：
-- `aeroflylink.exe` —— GUI 客户端（约 200KB，无运行时依赖）
+- `aeroflylink.exe` —— 单窗口 GUI 客户端（无控制台窗口，无额外运行时 DLL）
+- `aeroflylink-e2e.exe` —— 仅本地 E2E，允许注入合成密码和 JWT
 - `aeroflylink-cli.exe` —— 无头客户端（参数见 `--help`，支持 `--mock`）
 - `test_protocol.exe` / `test_p2.exe` —— 测试（构建时自动运行）
 
@@ -55,7 +58,8 @@ build.cmd
 
 ## 状态
 
-- ✅ P0 协议层 / ✅ P1 传输与桥接 / ✅ P2 无头客户端 / ✅ P3 Win32 GUI
-- ✅ legacy 与 FSD-JWT（`vatsim`）认证路径已实现
-- ⬜ ASC/VATSIM 线上环境互验（见 docs/RELEASE.md 通过矩阵）
+- ✅ P0 协议层 / ✅ P1 传输与桥接 / ✅ P2 无头客户端 / ✅ P3 Nuklear/Win32 GUI
+- ✅ legacy 与 FSD-JWT 认证路径；`auth_mode` 是用户配置名
+- Windows 10+ 是 v0.3.1 支持目标；Linux/macOS 暂无支持承诺
+- VATSIM 直连受获批软件规则限制；本程序仅显示官方地址供参考
 - ✅ 安装器切换到 C 版单文件分发（P4，`client-c/setup/`）
